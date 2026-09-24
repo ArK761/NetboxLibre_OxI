@@ -14,3 +14,6 @@ netbox_libreoxi = "netbox_libreoxi:NetBoxLibreOXIConfig"
 
 [tool.setuptools.packages.find]
 include = ["netbox_libreoxi*"]
+
+[tool.setuptools.package-data]
+netbox_libreoxi = ["templates/**/*.html"]
