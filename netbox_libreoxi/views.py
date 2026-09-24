@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
+from django.utils import timezone as django_timezone
 from django.utils.safestring import mark_safe
 
 from dcim.models import Device
@@ -25,7 +26,7 @@ def format_timestamp(value, settings):
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
-        parsed = parsed.astimezone(timezone.utc)
+        parsed = django_timezone.localtime(parsed)
         return parsed.strftime(settings.datetime_format)
     except (ValueError, TypeError):
         return value
@@ -36,6 +37,7 @@ def format_revision(name, settings):
         return "current.cfg"
     try:
         parsed = datetime.strptime(name.removesuffix(".cfg"), "%Y-%m-%d_%H-%M-%S").replace(tzinfo=timezone.utc)
+        parsed = django_timezone.localtime(parsed)
         return parsed.strftime(settings.datetime_format)
     except (ValueError, TypeError):
         return name
@@ -72,12 +74,15 @@ def _parse_log_line(line, settings):
             if "=" in token:
                 key, value = token.split("=", 1)
                 fields[key] = value
+
         def integer(name):
             try:
                 return int(fields.get(name, "0"))
-            except ValueError:
+            except (ValueError, TypeError):
                 return 0
+
         run_summary = {
+            "run": fields.get("run", ""),
             "started": format_timestamp(fields.get("started"), settings),
             "finished": format_timestamp(fields.get("finished"), settings),
             "devices": integer("devices"),
