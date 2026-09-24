@@ -1,0 +1,25 @@
+{% extends 'base/layout.html' %}
+
+{% block title %}LibreOXI - {{ object }}{% endblock %}
+
+{% block header %}
+  <div class="row align-items-center">
+    <div class="col">
+      <h1 class="mb-0">LibreOXI</h1>
+      <div class="text-muted">{{ object }}</div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="card">
+    <div class="card-header">
+      <strong>LibreOXI configuration</strong>
+    </div>
+    <div class="card-body">
+      <p class="text-muted mb-0">
+        LibreOXI configuration history and change comparison for this device will appear here.
+      </p>
+    </div>
+  </div>
+{% endblock %}
