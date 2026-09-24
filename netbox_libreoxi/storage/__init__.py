@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def device_dir(root: str, device_id: int) -> Path:
+def device_dir(root: str, device_id: int, create: bool = True) -> Path:
     path = Path(root).expanduser().resolve() / "devices" / str(device_id)
-    path.mkdir(parents=True, exist_ok=True)
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -16,7 +17,7 @@ def sha256(content: str) -> str:
 
 
 def read_current(root: str, device_id: int) -> tuple[str | None, str | None]:
-    directory = device_dir(root, device_id)
+    directory = device_dir(root, device_id, create=False)
     cfg = directory / "current.cfg"
     digest = directory / "current.sha256"
     if not cfg.exists():
@@ -59,7 +60,9 @@ def store_if_changed(root: str, device_id: int, content: str) -> dict:
 
 
 def list_history(root: str, device_id: int) -> list[Path]:
-    directory = device_dir(root, device_id)
+    directory = device_dir(root, device_id, create=False)
+    if not directory.exists():
+        return []
     return sorted(directory.glob("*.cfg"), reverse=True)
 
 

@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from django import forms
 
 from dcim.models import Device, DeviceRole
@@ -52,6 +55,27 @@ class LibreOXISettingsForm(forms.ModelForm):
             self.fields["devices"].initial = Device.objects.filter(
                 pk__in=self.instance.device_ids or []
             )
+
+    def clean_storage_root(self):
+        value = self.cleaned_data["storage_root"].strip()
+        if not value:
+            raise forms.ValidationError("Storage path is required.")
+
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            raise forms.ValidationError("Storage path must be an absolute path.")
+        if not path.exists():
+            raise forms.ValidationError(
+                f"Storage directory does not exist: {path}. Create it and grant write permission to the netbox user."
+            )
+        if not path.is_dir():
+            raise forms.ValidationError(f"Storage path is not a directory: {path}.")
+        if not os.access(path, os.W_OK | os.X_OK):
+            raise forms.ValidationError(
+                f"Storage directory is not writable by the NetBox process: {path}."
+            )
+
+        return str(path.resolve())
 
     def save(self, commit=True):
         instance = super().save(commit=False)

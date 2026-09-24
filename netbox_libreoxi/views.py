@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django.contrib import messages
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
@@ -24,15 +26,19 @@ class DeviceLibreOXIView(generic.ObjectView):
         history = []
         monitored = False
         last_check = None
+        storage_error = None
 
         if settings:
             monitored = monitored_devices(settings).filter(pk=device.pk).exists()
-            current, current_hash = read_current(settings.storage_root, device.pk)
-            directory = device_dir(settings.storage_root, device.pk)
-            marker = directory / "last_check"
-            if marker.exists():
-                last_check = marker.read_text(encoding="utf-8").strip()
-            history = [p.name for p in list_history(settings.storage_root, device.pk) if p.name != "current.cfg"]
+            try:
+                current, current_hash = read_current(settings.storage_root, device.pk)
+                directory = device_dir(settings.storage_root, device.pk, create=False)
+                marker = directory / "last_check"
+                if marker.exists():
+                    last_check = marker.read_text(encoding="utf-8").strip()
+                history = [p.name for p in list_history(settings.storage_root, device.pk) if p.name != "current.cfg"]
+            except OSError as exc:
+                storage_error = f"LibreOXI storage is not accessible: {exc}"
 
         return render(
             request,
@@ -47,6 +53,7 @@ class DeviceLibreOXIView(generic.ObjectView):
                 "current_hash": current_hash,
                 "history": history,
                 "last_check": last_check,
+                "storage_error": storage_error,
             },
         )
 
@@ -77,13 +84,14 @@ def settings_view(request):
         instance = LibreOXISettings(
             librenms_url="",
             oxidized_path="/api/v0/oxidized/config",
+            storage_root="/opt/libreoxi",
         )
 
     if request.method == "POST":
         form = LibreOXISettingsForm(request.POST, instance=instance)
         if form.is_valid():
             form.save()
-            messages.success(request, "LibreOXI settings saved.")
+            messages.success(request, "LibreOXI settings saved. New storage path is used immediately by device views and refresh jobs.")
             return redirect("plugins:netbox_libreoxi:settings")
     else:
         form = LibreOXISettingsForm(instance=instance)
