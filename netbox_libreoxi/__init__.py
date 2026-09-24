@@ -13,6 +13,7 @@ class NetBoxLibreOXIConfig(PluginConfig):
         "storage_root": "/var/lib/netbox/libreoxi",
         "request_timeout": 10,
         "check_interval_minutes": 5,
+        "schedule_cron": "*/5 * * * *",
         "retention_days": 365,
         "retention_revisions": 100,
         "verify_tls": True,
