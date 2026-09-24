@@ -7,7 +7,7 @@ name = "netbox-libreoxi"
 version = "0.1.0"
 description = "NetBox plugin for LibreNMS Oxidized/OXI configuration history"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["croniter>=2.0,<7"]
 
 [project.entry-points."netbox_plugins"]
 netbox_libreoxi = "netbox_libreoxi:NetBoxLibreOXIConfig"
@@ -16,4 +16,4 @@ netbox_libreoxi = "netbox_libreoxi:NetBoxLibreOXIConfig"
 include = ["netbox_libreoxi*"]
 
 [tool.setuptools.package-data]
-netbox_libreoxi = ["templates/**/*.html"]
+netbox_libreoxi = ["templates/**/*.html", "static/**/*.js"]
