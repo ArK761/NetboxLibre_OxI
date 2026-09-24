@@ -1,6 +1,14 @@
 {% extends 'generic/object.html' %}
 
 {% block content %}
+<style>
+  .libreoxi-device-log { font-size: 0.82rem; }
+  .libreoxi-log-event { font-weight: 600; }
+  .libreoxi-log-change { color: var(--bs-warning); }
+  .libreoxi-log-nochange { color: var(--bs-success); }
+  .libreoxi-log-error { color: var(--bs-danger); }
+</style>
+
   <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
       <strong>LibreOXI configuration</strong>
@@ -128,7 +136,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card libreoxi-device-log">
           <div class="card-header">
             <strong>Device activity log</strong>
           </div>
@@ -136,16 +144,30 @@
             {% if device_logs %}
               <div class="table-responsive">
                 <table class="table table-sm table-hover mb-0">
-                  <thead><tr><th>Date/time</th><th>Event</th></tr></thead>
+                  <thead>
+                    <tr><th>Date/time</th><th>Event</th></tr>
+                  </thead>
                   <tbody>
                     {% for entry in device_logs %}
-                      <tr><td class="text-nowrap"><code>{{ entry.timestamp }}</code></td><td>{{ entry.message }}</td></tr>
+                      <tr>
+                        <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
+                        <td>
+                          <span class="me-2">{{ entry.display_message }}</span>
+                          {% if entry.event == 'CHANGE' %}
+                            <span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>
+                          {% elif entry.event == 'NOCHANGE' %}
+                            <span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>
+                          {% elif entry.event == 'ERROR' %}
+                            <span class="libreoxi-log-event libreoxi-log-error">ERROR</span>
+                          {% endif %}
+                        </td>
+                      </tr>
                     {% endfor %}
                   </tbody>
                 </table>
               </div>
             {% else %}
-              <div class="p-3 text-muted">No log entries for this device.</div>
+              <div class="p-3 text-muted">No LibreOXI checks recorded for this device.</div>
             {% endif %}
           </div>
         </div>
