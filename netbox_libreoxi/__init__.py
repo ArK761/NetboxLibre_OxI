@@ -12,7 +12,7 @@ class NetBoxLibreOXIConfig(PluginConfig):
     default_settings = {
         "storage_root": "/var/lib/netbox/libreoxi",
         "request_timeout": 10,
-        "check_interval_minutes": 60,
+        "check_interval_minutes": 5,
         "retention_days": 365,
         "retention_revisions": 100,
         "verify_tls": True,
