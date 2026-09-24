@@ -1,4 +1,4 @@
-from netbox.plugins import PluginConfig
+from netbox.plugins import PluginConfig, PluginMenuItem
 
 
 class NetBoxLibreOXIConfig(PluginConfig):
@@ -17,6 +17,12 @@ class NetBoxLibreOXIConfig(PluginConfig):
         "retention_revisions": 100,
         "verify_tls": True,
     }
+    menu_items = (
+        PluginMenuItem(
+            link="plugins:netbox_libreoxi:settings",
+            link_text="LibreOXI",
+        ),
+    )
 
 
 config = NetBoxLibreOXIConfig
