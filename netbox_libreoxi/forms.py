@@ -19,6 +19,17 @@ DATETIME_FORMAT_CHOICES = (
 )
 
 
+CHECK_INTERVAL_CHOICES = (
+    (5, "5 minutes"),
+    (10, "10 minutes"),
+    (15, "15 minutes"),
+    (20, "20 minutes"),
+    (30, "30 minutes"),
+    (60, "1 hour"),
+    (90, "1 hour 30 minutes"),
+)
+
+
 class LibreOXISettingsForm(forms.ModelForm):
     api_token = forms.CharField(
         label="LibreNMS API token",
@@ -41,6 +52,12 @@ class LibreOXISettingsForm(forms.ModelForm):
         label="Date/time display format",
         choices=DATETIME_FORMAT_CHOICES,
         help_text="Only the displayed date/time format changes. Stored timestamps remain UTC/ISO internally.",
+    )
+    check_interval_minutes = forms.TypedChoiceField(
+        label="Check interval",
+        choices=CHECK_INTERVAL_CHOICES,
+        coerce=int,
+        help_text="Select how often scheduled device checks run. Short intervals can increase LibreNMS and NetBox load.",
     )
 
     class Meta:
