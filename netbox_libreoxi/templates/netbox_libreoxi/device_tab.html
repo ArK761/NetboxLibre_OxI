@@ -77,8 +77,6 @@
               const text = document.getElementById('libreoxi-config')?.textContent || '';
               try {
                 await navigator.clipboard.writeText(text);
-                this.textContent = 'Copied';
-                setTimeout(() => { this.textContent = 'Copy'; }, 1500);
               } catch (error) {
                 const area = document.createElement('textarea');
                 area.value = text;
@@ -86,32 +84,75 @@
                 area.select();
                 document.execCommand('copy');
                 area.remove();
-                this.textContent = 'Copied';
-                setTimeout(() => { this.textContent = 'Copy'; }, 1500);
               }
+              this.textContent = 'Copied';
+              setTimeout(() => { this.textContent = 'Copy'; }, 1500);
             });
           </script>
         {% endif %}
 
         <div class="card">
-          <div class="card-header"><strong>Configuration history</strong></div>
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Configuration history</strong>
+            <button type="button" class="btn btn-primary btn-sm" id="libreoxi-compare" disabled>Compare selected (2)</button>
+          </div>
           <div class="card-body">
-            {% if history %}
+            {% if current or history %}
               <div class="list-group">
-                <a href="{% url 'dcim:device_libreoxi' device.pk %}" class="list-group-item list-group-item-action{% if selected_name == 'current.cfg' %} active{% endif %}">
-                  <code>current.cfg</code> — current configuration
-                </a>
+                {% if current %}
+                  <label class="list-group-item d-flex align-items-center gap-2">
+                    <input class="form-check-input mt-0 libreoxi-revision" type="checkbox" value="current.cfg">
+                    <a class="flex-grow-1 text-decoration-none" href="{% url 'dcim:device_libreoxi' device.pk %}">
+                      <code>current.cfg</code> — current configuration
+                    </a>
+                  </label>
+                {% endif %}
                 {% for item in history %}
-                  <a href="{% url 'dcim:device_libreoxi' device.pk %}?revision={{ item|urlencode }}" class="list-group-item list-group-item-action{% if selected_name == item %} active{% endif %}">
-                    <code>{{ item }}</code>
-                  </a>
+                  <label class="list-group-item d-flex align-items-center gap-2">
+                    <input class="form-check-input mt-0 libreoxi-revision" type="checkbox" value="{{ item }}">
+                    <a class="flex-grow-1 text-decoration-none{% if selected_name == item %} fw-bold{% endif %}" href="{% url 'dcim:device_libreoxi' device.pk %}?revision={{ item|urlencode }}">
+                      <code>{{ item }}</code>
+                    </a>
+                    <form method="post" action="{% url 'plugins:netbox_libreoxi:delete_revision' device.pk %}" class="mb-0" onsubmit="return confirm('Delete this configuration revision?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="revision" value="{{ item }}">
+                      <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                    </form>
+                  </label>
                 {% endfor %}
               </div>
+              <div class="form-text mt-2">Select exactly two configurations and click Compare. You can compare any historical revision with the current configuration.</div>
             {% else %}
-              <span class="text-muted">No previous revisions stored.</span>
+              <span class="text-muted">No configurations stored.</span>
             {% endif %}
           </div>
         </div>
+
+        <script>
+          (() => {
+            const boxes = Array.from(document.querySelectorAll('.libreoxi-revision'));
+            const button = document.getElementById('libreoxi-compare');
+            const update = () => {
+              const selected = boxes.filter(box => box.checked);
+              button.disabled = selected.length !== 2;
+              button.textContent = `Compare selected (${selected.length}/2)`;
+            };
+            boxes.forEach(box => box.addEventListener('change', () => {
+              const selected = boxes.filter(item => item.checked);
+              if (selected.length > 2) box.checked = false;
+              update();
+            }));
+            button?.addEventListener('click', () => {
+              const selected = boxes.filter(box => box.checked).map(box => box.value);
+              if (selected.length !== 2) return;
+              const url = new URL("{% url 'plugins:netbox_libreoxi:compare_config' device.pk %}", window.location.origin);
+              url.searchParams.set('old', selected[1]);
+              url.searchParams.set('new', selected[0]);
+              window.location.href = url.toString();
+            });
+            update();
+          })();
+        </script>
       {% endif %}
     </div>
   </div>
