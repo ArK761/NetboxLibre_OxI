@@ -58,7 +58,7 @@
             <div class="card h-100">
               <div class="card-body">
                 <div class="text-muted">Last check</div>
-                <strong>{{ last_check|default:"Never" }}</strong>
+                <strong id="libreoxi-last-check" data-value="{{ last_check|default:'' }}">{{ last_check|default:"Never" }}</strong>
               </div>
             </div>
           </div>
@@ -181,15 +181,17 @@
                             <span class="libreoxi-log-event libreoxi-log-error">ERROR</span>
                           {% endif %}
                           {% with entry_hash=entry.message|log_hash %}
-                            {% if entry_hash %}
-                              <details class="libreoxi-log-details d-inline-block ms-1">
-                                <summary title="Details">⋮</summary>
-                                <div class="libreoxi-log-detail-box">
+                            <details class="libreoxi-log-details d-inline-block ms-1">
+                              <summary title="Details">⋮</summary>
+                              <div class="libreoxi-log-detail-box">
+                                {% if entry_hash %}
                                   <div class="text-muted">SHA256</div>
                                   <code>{{ entry_hash }}</code>
-                                </div>
-                              </details>
-                            {% endif %}
+                                {% else %}
+                                  <div class="text-muted">No additional details available.</div>
+                                {% endif %}
+                              </div>
+                            </details>
                           {% endwith %}
                         </td>
                       </tr>
@@ -206,31 +208,62 @@
         <script>
           (() => {
             const countdown = document.getElementById('libreoxi-countdown');
-            if (countdown) {
-              let seconds = Number(countdown.dataset.seconds || 0);
-              const render = () => {
-                if (seconds <= 0) {
-                  countdown.textContent = 'due now';
-                  return;
-                }
-                const days = Math.floor(seconds / 86400);
-                const hours = Math.floor((seconds % 86400) / 3600);
-                const minutes = Math.floor((seconds % 3600) / 60);
-                const secs = seconds % 60;
-                const parts = [];
-                if (days) parts.push(`${days}d`);
-                if (hours || days) parts.push(`${hours}h`);
-                if (minutes || hours || days) parts.push(`${minutes}m`);
-                parts.push(`${secs}s`);
-                countdown.textContent = `in ${parts.join(' ')}`;
-              };
-              render();
-              setInterval(() => {
-                seconds = Math.max(0, seconds - 1);
-                render();
-              }, 1000);
-            }
+            const lastCheck = document.getElementById('libreoxi-last-check');
+            let seconds = Number(countdown?.dataset.seconds || 0);
+            let refreshPending = false;
 
+            const render = () => {
+              if (!countdown) return;
+              if (seconds <= 0) {
+                countdown.textContent = 'checking...';
+                return;
+              }
+              const days = Math.floor(seconds / 86400);
+              const hours = Math.floor((seconds % 86400) / 3600);
+              const minutes = Math.floor((seconds % 3600) / 60);
+              const secs = seconds % 60;
+              const parts = [];
+              if (days) parts.push(`${days}d`);
+              if (hours || days) parts.push(`${hours}h`);
+              if (minutes || hours || days) parts.push(`${minutes}m`);
+              parts.push(`${secs}s`);
+              countdown.textContent = `in ${parts.join(' ')}`;
+            };
+
+            const checkForScheduledRefresh = async () => {
+              if (refreshPending || !lastCheck) return;
+              try {
+                const response = await fetch(window.location.href, {
+                  method: 'GET',
+                  cache: 'no-store',
+                  headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                if (!response.ok) return;
+                const html = await response.text();
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const remoteLastCheck = doc.getElementById('libreoxi-last-check')?.dataset.value || '';
+                const localLastCheck = lastCheck.dataset.value || '';
+                if (remoteLastCheck && remoteLastCheck !== localLastCheck) {
+                  refreshPending = true;
+                  window.location.reload();
+                }
+              } catch (error) {
+                // A temporary polling failure must not interrupt the countdown.
+              }
+            };
+
+            render();
+            setInterval(() => {
+              if (seconds > 0) seconds -= 1;
+              render();
+            }, 1000);
+
+            // Poll the rendered page, not LibreNMS. This only detects that the
+            // background scheduler has completed and then refreshes the UI.
+            setInterval(checkForScheduledRefresh, 5000);
+          })();
+
+          (() => {
             const boxes = Array.from(document.querySelectorAll('.libreoxi-revision'));
             const button = document.getElementById('libreoxi-compare');
             const update = () => {
