@@ -12,9 +12,10 @@ from .storage import append_log, cleanup, device_dir, store_if_changed
 def monitored_devices(settings):
     from dcim.models import Device
 
-    role_ids = settings.device_roles.values_list("id", flat=True)
+    role_ids = [int(value) for value in (settings.device_role_ids or [])]
+    device_ids = [int(value) for value in (settings.device_ids or [])]
     devices = Device.objects.filter(role_id__in=role_ids)
-    return (devices | settings.devices.all()).distinct().order_by("pk")
+    return (devices | Device.objects.filter(pk__in=device_ids)).distinct().order_by("pk")
 
 
 def device_ip(device):
