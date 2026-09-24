@@ -119,5 +119,19 @@
   {% endif %}
 </div>
 
-<script src="{% static 'netbox_libreoxi/logs.js' %}"></script>
+<script>
+(() => {
+  const toggle = (event) => {
+    const button = event.target.closest('.libreoxi-log-toggle-btn');
+    if (!button) return;
+    const detail = document.getElementById(button.dataset.detailId);
+    if (!detail) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const open = detail.classList.toggle('open');
+    button.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  document.addEventListener('click', toggle, true);
+})();
+</script>
 {% endblock %}
