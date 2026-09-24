@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 from difflib import HtmlDiff, SequenceMatcher
+import re
 
 from django.contrib import messages
 from django.http import HttpResponse
@@ -41,7 +42,50 @@ def format_revision(name, settings):
         return name
 
 
-def read_device_logs(root, device, limit=100):
+def _parse_log_line(line, settings):
+    parts = line.split(" ", 1)
+    timestamp = parts[0] if parts else ""
+    message = parts[1] if len(parts) > 1 else line
+    timestamp = format_timestamp(timestamp, settings)
+
+    # Do not expose hashes in the human-readable audit log. The hashes remain
+    # in the stored configuration metadata and are still used for change detection.
+    message = re.sub(r"\s+hash=[0-9a-fA-F]+\b", "", message)
+
+    event = "INFO"
+    device_name = None
+    display_message = message
+
+    if message.startswith("CHANGE "):
+        event = "CHANGE"
+        payload = message[len("CHANGE "):]
+        device_name = payload.split(" configuration stored", 1)[0]
+        display_message = "DEVICE BACKUP CHECK"
+    elif message.startswith("NOCHANGE "):
+        event = "NOCHANGE"
+        payload = message[len("NOCHANGE "):]
+        device_name = payload.split(" ", 1)[0]
+        display_message = "DEVICE BACKUP CHECK"
+    elif message.startswith("ERROR "):
+        event = "ERROR"
+        payload = message[len("ERROR "):]
+        device_name = payload.split(" LibreNMS ", 1)[0]
+        display_message = "DEVICE BACKUP CHECK"
+    elif message.startswith("INFO scheduled refresh"):
+        # Scheduler bookkeeping is deliberately not shown as a device event.
+        event = "SCHEDULER"
+        display_message = message
+
+    return {
+        "timestamp": timestamp,
+        "message": message,
+        "display_message": display_message,
+        "event": event,
+        "device_name": device_name,
+    }
+
+
+def read_device_logs(root, device, settings, limit=100):
     path = Path(root).expanduser().resolve() / "libreoxi.log"
     if not path.exists():
         return []
@@ -52,12 +96,10 @@ def read_device_logs(root, device, limit=100):
     except OSError:
         return []
     for line in reversed(lines):
-        if needle not in line:
+        parsed = _parse_log_line(line, settings)
+        if parsed["device_name"] != needle:
             continue
-        parts = line.split(" ", 1)
-        timestamp = parts[0] if parts else ""
-        message = parts[1] if len(parts) > 1 else line
-        entries.append({"timestamp": timestamp, "message": message})
+        entries.append(parsed)
         if len(entries) >= limit:
             break
     return entries
@@ -74,13 +116,10 @@ def read_all_logs(root, settings, limit=500):
 
     entries = []
     for line in reversed(lines):
-        parts = line.split(" ", 1)
-        timestamp = parts[0] if parts else ""
-        message = parts[1] if len(parts) > 1 else line
-        entries.append({
-            "timestamp": format_timestamp(timestamp, settings),
-            "message": message,
-        })
+        parsed = _parse_log_line(line, settings)
+        if parsed["event"] == "SCHEDULER":
+            continue
+        entries.append(parsed)
         if len(entries) >= limit:
             break
     return entries
@@ -152,9 +191,7 @@ class DeviceLibreOXIView(generic.ObjectView):
                     selected_name = revision
                 else:
                     selected_config = current
-                device_logs = read_device_logs(settings.storage_root, device)
-                for entry in device_logs:
-                    entry["timestamp"] = format_timestamp(entry["timestamp"], settings)
+                device_logs = read_device_logs(settings.storage_root, device, settings)
             except OSError as exc:
                 storage_error = f"LibreOXI storage is not accessible: {exc}"
 
@@ -320,11 +357,33 @@ def download_config(request, pk):
 
 def logs_view(request):
     settings = LibreOXISettings.objects.first()
-    logs = read_all_logs(settings.storage_root, settings) if settings else []
+    if not settings:
+        return render(request, "netbox_libreoxi/logs.html", {"settings": None, "devices": [], "selected_device": None, "logs": []})
+
+    devices = list(monitored_devices(settings))
+    selected_id = request.GET.get("device", "").strip()
+    selected_device = None
+    logs = []
+
+    if selected_id.isdigit():
+        selected_device = next((device for device in devices if device.pk == int(selected_id)), None)
+        if selected_device:
+            logs = read_device_logs(settings.storage_root, selected_device, settings)
+
+    # Show the most recent event next to each device in the tree.
+    for device in devices:
+        device_logs = read_device_logs(settings.storage_root, device, settings, limit=1)
+        device.latest_log = device_logs[0] if device_logs else None
+
     return render(
         request,
         "netbox_libreoxi/logs.html",
-        {"settings": settings, "logs": logs},
+        {
+            "settings": settings,
+            "devices": devices,
+            "selected_device": selected_device,
+            "logs": logs,
+        },
     )
 
 
