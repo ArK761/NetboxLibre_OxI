@@ -21,6 +21,10 @@ class LibreOXISettings(models.Model):
     enabled = models.BooleanField(default=True)
     device_role_ids = models.JSONField(default=list, blank=True)
     device_ids = models.JSONField(default=list, blank=True)
+    datetime_format = models.CharField(
+        max_length=64,
+        default="%d.%m.%Y %H:%M:%S",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
