@@ -1,29 +1,42 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
+from croniter import croniter
 from django.utils import timezone
 
 
-# These values are deliberately cron-like: checks are aligned to fixed wall-clock
-# boundaries rather than scheduled N minutes after the previous check finished.
-SUPPORTED_INTERVALS = (5, 10, 15, 20, 30, 60, 90)
+def cron_lines(schedule: str) -> list[str]:
+    return [
+        line.strip()
+        for line in (schedule or "").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
 
 
-def schedule_slot(now: datetime | None, interval_minutes: int) -> tuple[datetime, datetime]:
-    """Return the current and next fixed schedule slots in Django local time."""
-    interval = int(interval_minutes)
-    if interval not in SUPPORTED_INTERVALS:
-        raise ValueError(f"Unsupported LibreOXI interval: {interval}")
+def validate_cron_schedule(schedule: str) -> str:
+    lines = cron_lines(schedule)
+    if not lines:
+        raise ValueError("Cron schedule cannot be empty.")
+    for line in lines:
+        if not croniter.is_valid(line):
+            raise ValueError(f"Invalid cron expression: {line}")
+    return "\n".join(lines)
 
+
+def schedule_matches(now: datetime | None, schedule: str) -> tuple[bool, datetime | None]:
+    local_now = timezone.localtime(now or timezone.now()).replace(second=0, microsecond=0)
+    for expression in cron_lines(schedule):
+        if croniter.match(expression, local_now):
+            return True, local_now
+    return False, None
+
+
+def next_scheduled_check(now: datetime | None, schedule: str) -> datetime:
     local_now = timezone.localtime(now or timezone.now())
-    day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    minutes_since_midnight = local_now.hour * 60 + local_now.minute
-    slot_minutes = (minutes_since_midnight // interval) * interval
-    slot = day_start + timedelta(minutes=slot_minutes)
-    next_slot = slot + timedelta(minutes=interval)
-    return slot, next_slot
-
-
-def next_scheduled_check(now: datetime | None, interval_minutes: int) -> datetime:
-    return schedule_slot(now, interval_minutes)[1]
+    candidates = []
+    for expression in cron_lines(schedule):
+        candidates.append(croniter(expression, local_now).get_next(datetime))
+    if not candidates:
+        raise ValueError("Cron schedule cannot be empty.")
+    return min(candidates)
