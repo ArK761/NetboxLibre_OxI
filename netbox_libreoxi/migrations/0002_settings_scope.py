@@ -17,20 +17,12 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="libreoxisettings",
-            name="device_roles",
-            field=models.ManyToManyField(
-                blank=True,
-                related_name="libreoxi_settings",
-                to="dcim.devicerole",
-            ),
+            name="device_role_ids",
+            field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
             model_name="libreoxisettings",
-            name="devices",
-            field=models.ManyToManyField(
-                blank=True,
-                related_name="libreoxi_settings",
-                to="dcim.device",
-            ),
+            name="device_ids",
+            field=models.JSONField(blank=True, default=list),
         ),
     ]
