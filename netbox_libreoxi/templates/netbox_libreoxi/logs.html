@@ -12,7 +12,8 @@
   .libreoxi-log-change { color: var(--bs-warning); }
   .libreoxi-log-nochange { color: var(--bs-success); }
   .libreoxi-log-error { color: var(--bs-danger); }
-  .libreoxi-log-details summary { cursor: pointer; list-style: none; display: inline-block; padding: 0 0.35rem; font-weight: 700; }
+  .libreoxi-log-details summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; padding: 0; font-weight: 700; border-radius: 0.2rem; }
+  .libreoxi-log-details summary:hover { background: var(--bs-secondary-bg); }
   .libreoxi-log-details summary::-webkit-details-marker { display: none; }
   .libreoxi-log-details[open] summary { color: var(--bs-info); }
   .libreoxi-log-detail-box { margin-top: 0.35rem; padding: 0.5rem; background: var(--bs-tertiary-bg); border-radius: 0.25rem; }
@@ -85,15 +86,17 @@
                           <span class="libreoxi-log-event libreoxi-log-error">ERROR</span>
                         {% endif %}
                         {% with entry_hash=entry.message|log_hash %}
-                          {% if entry_hash %}
-                            <details class="libreoxi-log-details d-inline-block ms-1">
-                              <summary title="Details">⋮</summary>
-                              <div class="libreoxi-log-detail-box">
+                          <details class="libreoxi-log-details d-inline-block ms-1">
+                            <summary title="Details">⋮</summary>
+                            <div class="libreoxi-log-detail-box">
+                              {% if entry_hash %}
                                 <div class="text-muted">SHA256</div>
                                 <code>{{ entry_hash }}</code>
-                              </div>
-                            </details>
-                          {% endif %}
+                              {% else %}
+                                <div class="text-muted">No additional details available.</div>
+                              {% endif %}
+                            </div>
+                          </details>
                         {% endwith %}
                       </td>
                     </tr>
