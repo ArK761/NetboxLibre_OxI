@@ -2,13 +2,81 @@
 
 {% block content %}
   <div class="card">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
       <strong>LibreOXI configuration</strong>
+      {% if monitored %}
+        <form method="post" class="mb-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-sm">Refresh</button>
+        </form>
+      {% endif %}
     </div>
     <div class="card-body">
-      <p class="text-muted mb-0">
-        LibreOXI configuration history and change comparison for this device will appear here.
-      </p>
+      {% if not settings %}
+        <div class="alert alert-warning mb-0">
+          LibreOXI is not configured. Open LibreOXI → Settings.
+        </div>
+      {% elif not monitored %}
+        <div class="alert alert-secondary mb-0">
+          This device is not selected for LibreOXI monitoring.
+          Select its Device Role or add the device explicitly in LibreOXI Settings.
+        </div>
+      {% else %}
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <div class="card h-100">
+              <div class="card-body">
+                <div class="text-muted">Status</div>
+                {% if current %}
+                  <strong class="text-success">Configuration available</strong>
+                {% else %}
+                  <strong class="text-warning">No configuration stored</strong>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card h-100">
+              <div class="card-body">
+                <div class="text-muted">Last check</div>
+                <strong>{{ last_check|default:"Never" }}</strong>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card h-100">
+              <div class="card-body">
+                <div class="text-muted">Current SHA256</div>
+                <code>{{ current_hash|default:"-" }}</code>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% if current %}
+          <div class="card mb-3">
+            <div class="card-header"><strong>Current configuration</strong></div>
+            <div class="card-body p-0">
+              <pre class="mb-0 p-3" style="max-height: 600px; overflow:auto; white-space: pre-wrap;">{{ current }}</pre>
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="card">
+          <div class="card-header"><strong>Configuration history</strong></div>
+          <div class="card-body">
+            {% if history %}
+              <ul class="mb-0">
+                {% for item in history %}
+                  <li><code>{{ item }}</code></li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <span class="text-muted">No previous revisions stored.</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
     </div>
   </div>
 {% endblock content %}
