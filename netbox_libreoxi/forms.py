@@ -1,7 +1,7 @@
 from django import forms
 
 from dcim.models import Device, DeviceRole
-from utilities.forms import DynamicModelMultipleChoiceField
+from utilities.forms.fields import DynamicModelMultipleChoiceField
 
 from .models import LibreOXISettings
 
