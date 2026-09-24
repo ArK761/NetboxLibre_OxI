@@ -25,4 +25,9 @@ class Migration(migrations.Migration):
             name="device_ids",
             field=models.JSONField(blank=True, default=list),
         ),
+        migrations.AlterField(
+            model_name="libreoxisettings",
+            name="check_interval_minutes",
+            field=models.PositiveIntegerField(default=5),
+        ),
     ]
