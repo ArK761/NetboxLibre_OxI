@@ -24,6 +24,31 @@ def device_ip(device):
     return str(device.primary_ip4.address.ip)
 
 
+def _extract_config(response: requests.Response):
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise RuntimeError("LibreNMS returned an invalid JSON response.") from exc
+
+    if not isinstance(data, dict):
+        raise RuntimeError("LibreNMS returned an unexpected response format.")
+
+    if data.get("status") != "ok":
+        status = data.get("status") or "unknown"
+        raise RuntimeError(f"LibreNMS returned status: {status}")
+
+    config = data.get("config")
+    if isinstance(config, list):
+        if not all(isinstance(line, str) for line in config):
+            raise RuntimeError("LibreNMS returned an invalid config array.")
+        return "".join(config)
+
+    if isinstance(config, str):
+        return config
+
+    raise RuntimeError("LibreNMS response does not contain a valid config.")
+
+
 def fetch_device(settings: LibreOXISettings, device):
     ip = device_ip(device)
     if not ip:
@@ -42,9 +67,13 @@ def fetch_device(settings: LibreOXISettings, device):
             verify=settings.verify_tls,
         )
         response.raise_for_status()
-        content = response.text
+        content = _extract_config(response)
     except requests.RequestException as exc:
         append_log(settings.storage_root, f"ERROR {device} LibreNMS request failed: {exc}")
+        _record_last_check(settings.storage_root, device.pk)
+        return {"ok": False, "error": str(exc)}
+    except RuntimeError as exc:
+        append_log(settings.storage_root, f"ERROR {device} LibreNMS response invalid: {exc}")
         _record_last_check(settings.storage_root, device.pk)
         return {"ok": False, "error": str(exc)}
 
