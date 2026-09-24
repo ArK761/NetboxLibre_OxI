@@ -5,7 +5,7 @@ class NetBoxLibreOXIConfig(PluginConfig):
     name = "netbox_libreoxi"
     verbose_name = "NetBox LibreOXI"
     description = "Retrieve and track network device configurations from LibreNMS Oxidized/OXI."
-    version = "0.1.0"
+    version = "0.2.0"
     base_url = "libreoxi"
     min_version = "4.7.0"
     max_version = "4.7.99"
@@ -18,6 +18,10 @@ class NetBoxLibreOXIConfig(PluginConfig):
         "verify_tls": True,
     }
     menu = "navigation.menu"
+
+    def ready(self):
+        super().ready()
+        from .jobs import libreoxi  # noqa: F401
 
 
 config = NetBoxLibreOXIConfig
