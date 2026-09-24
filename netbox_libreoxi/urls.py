@@ -6,6 +6,7 @@ app_name = "netbox_libreoxi"
 
 urlpatterns = [
     path("settings/", views.settings_view, name="settings"),
+    path("logs/", views.logs_view, name="logs"),
     path("devices/<int:pk>/download/", views.download_config, name="download_config"),
     path("devices/<int:pk>/compare/", views.compare_config, name="compare_config"),
     path("devices/<int:pk>/delete-revision/", views.delete_revision, name="delete_revision"),
