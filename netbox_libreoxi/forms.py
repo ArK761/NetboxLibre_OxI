@@ -38,23 +38,26 @@ class LibreOXISettingsForm(forms.ModelForm):
             "retention_revisions",
             "verify_tls",
             "enabled",
-            "device_roles",
-            "devices",
         )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["api_token"].initial = self.instance.api_token_encrypted
         if self.instance.pk:
-            self.fields["device_roles"].initial = self.instance.device_roles.all()
-            self.fields["devices"].initial = self.instance.devices.all()
+            self.fields["device_roles"].initial = DeviceRole.objects.filter(
+                pk__in=self.instance.device_role_ids or []
+            )
+            self.fields["devices"].initial = Device.objects.filter(
+                pk__in=self.instance.device_ids or []
+            )
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         token = self.cleaned_data.get("api_token")
         if token:
             instance.api_token_encrypted = token
+        instance.device_role_ids = [obj.pk for obj in self.cleaned_data.get("device_roles", [])]
+        instance.device_ids = [obj.pk for obj in self.cleaned_data.get("devices", [])]
         if commit:
             instance.save()
-            self.save_m2m()
         return instance
