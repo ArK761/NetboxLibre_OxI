@@ -15,6 +15,7 @@ class LibreOXISettings(models.Model):
     )
     request_timeout = models.PositiveIntegerField(default=10)
     check_interval_minutes = models.PositiveIntegerField(default=5)
+    schedule_cron = models.TextField(default="*/5 * * * *")
     retention_days = models.PositiveIntegerField(default=365)
     retention_revisions = models.PositiveIntegerField(default=100)
     verify_tls = models.BooleanField(default=True)
