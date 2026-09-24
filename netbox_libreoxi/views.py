@@ -24,6 +24,8 @@ class DeviceLibreOXIView(generic.ObjectView):
         device = get_object_or_404(Device, pk=pk)
         settings = LibreOXISettings.objects.first()
         current, current_hash = (None, None)
+        selected_config = None
+        selected_name = "current.cfg"
         history = []
         monitored = False
         last_check = None
@@ -37,7 +39,20 @@ class DeviceLibreOXIView(generic.ObjectView):
                 marker = directory / "last_check"
                 if marker.exists():
                     last_check = marker.read_text(encoding="utf-8").strip()
-                history = [p.name for p in list_history(settings.storage_root, device.pk) if p.name != "current.cfg"]
+
+                history_paths = [
+                    p for p in list_history(settings.storage_root, device.pk)
+                    if p.name != "current.cfg"
+                ]
+                history = [p.name for p in history_paths]
+
+                revision = request.GET.get("revision", "").strip()
+                if revision and revision in history:
+                    selected_path = directory / revision
+                    selected_config = selected_path.read_text(encoding="utf-8", errors="replace")
+                    selected_name = revision
+                else:
+                    selected_config = current
             except OSError as exc:
                 storage_error = f"LibreOXI storage is not accessible: {exc}"
 
@@ -52,6 +67,8 @@ class DeviceLibreOXIView(generic.ObjectView):
                 "monitored": monitored,
                 "current": current,
                 "current_hash": current_hash,
+                "selected_config": selected_config,
+                "selected_name": selected_name,
                 "history": history,
                 "last_check": last_check,
                 "storage_error": storage_error,
@@ -87,7 +104,17 @@ def download_config(request, pk):
         return HttpResponse("Device is not selected for LibreOXI monitoring.", status=404, content_type="text/plain")
 
     try:
-        current, _ = read_current(settings.storage_root, device.pk)
+        directory = device_dir(settings.storage_root, device.pk, create=False)
+        revision = request.GET.get("revision", "").strip()
+
+        if revision:
+            history = {p.name for p in list_history(settings.storage_root, device.pk)}
+            if revision not in history or Path(revision).name != revision:
+                return HttpResponse("Configuration revision not found.", status=404, content_type="text/plain")
+            selected_path = directory / revision
+            current = selected_path.read_text(encoding="utf-8", errors="replace")
+        else:
+            current, _ = read_current(settings.storage_root, device.pk)
     except OSError as exc:
         return HttpResponse(f"LibreOXI storage is not accessible: {exc}", status=500, content_type="text/plain")
 
