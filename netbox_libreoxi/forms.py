@@ -38,6 +38,8 @@ class LibreOXISettingsForm(forms.ModelForm):
             "retention_revisions",
             "verify_tls",
             "enabled",
+            "device_roles",
+            "devices",
         )
 
     def __init__(self, *args, **kwargs):
