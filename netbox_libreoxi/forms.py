@@ -10,6 +10,15 @@ from utilities.forms.fields import DynamicModelMultipleChoiceField
 from .models import LibreOXISettings
 
 
+DATETIME_FORMAT_CHOICES = (
+    ("%d.%m.%Y %H:%M:%S", "24.09.2026 18:06:06 (EU)"),
+    ("%d/%m/%Y %H:%M:%S", "24/09/2026 18:06:06 (EU slash)"),
+    ("%Y-%m-%d %H:%M:%S", "2026-09-24 18:06:06 (ISO-like)"),
+    ("%d.%m.%Y %H:%M", "24.09.2026 18:06 (EU, no seconds)"),
+    ("%Y-%m-%dT%H:%M:%S", "2026-09-24T18:06:06 (ISO 8601)"),
+)
+
+
 class LibreOXISettingsForm(forms.ModelForm):
     api_token = forms.CharField(
         label="LibreNMS API token",
@@ -28,6 +37,11 @@ class LibreOXISettingsForm(forms.ModelForm):
         required=False,
         help_text="These devices are checked even when their role is not selected.",
     )
+    datetime_format = forms.ChoiceField(
+        label="Date/time display format",
+        choices=DATETIME_FORMAT_CHOICES,
+        help_text="Only the displayed date/time format changes. Stored timestamps remain UTC/ISO internally.",
+    )
 
     class Meta:
         model = LibreOXISettings
@@ -44,6 +58,7 @@ class LibreOXISettingsForm(forms.ModelForm):
             "enabled",
             "device_roles",
             "devices",
+            "datetime_format",
         )
 
     def __init__(self, *args, **kwargs):
@@ -76,9 +91,6 @@ class LibreOXISettingsForm(forms.ModelForm):
                 f"Storage directory is not writable by the NetBox process: {path}."
             )
 
-        # Do a real write/delete test. This verifies that the NetBox process
-        # can actually create files in the selected directory, including when
-        # ACLs or other permission mechanisms make os.access() insufficient.
         fd = None
         probe = None
         try:
