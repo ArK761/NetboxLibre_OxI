@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 import requests
 
 from .models import LibreOXISettings
-from .storage import append_log, cleanup, store_if_changed
+from .storage import append_log, cleanup, device_dir, store_if_changed
 
 
 def monitored_devices(settings):
@@ -29,7 +30,7 @@ def fetch_device(settings: LibreOXISettings, device):
 
     base = settings.librenms_url.rstrip("/")
     path = settings.oxidized_path.strip("/")
-    url = f"{base}/{path}/{quote(ip, safe='') }"
+    url = f"{base}/{path}/{quote(ip, safe='')}"
     headers = {"X-Auth-Token": settings.api_token_encrypted}
 
     try:
@@ -43,7 +44,10 @@ def fetch_device(settings: LibreOXISettings, device):
         content = response.text
     except requests.RequestException as exc:
         append_log(settings.storage_root, f"ERROR {device} LibreNMS request failed: {exc}")
+        _record_last_check(settings.storage_root, device.pk)
         return {"ok": False, "error": str(exc)}
+
+    _record_last_check(settings.storage_root, device.pk)
 
     if not content.strip():
         error = "LibreNMS returned an empty configuration. Existing configuration was kept."
@@ -62,3 +66,8 @@ def fetch_device(settings: LibreOXISettings, device):
     else:
         append_log(settings.storage_root, f"NOCHANGE {device} hash={result['hash']}")
     return {"ok": True, "device": device, **result}
+
+
+def _record_last_check(root: str, device_id: int) -> None:
+    marker = device_dir(root, device_id) / "last_check"
+    marker.write_text(datetime.now(timezone.utc).isoformat(timespec="seconds"), encoding="utf-8")
