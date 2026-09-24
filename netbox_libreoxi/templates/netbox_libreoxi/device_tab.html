@@ -8,14 +8,14 @@
   .libreoxi-log-change { color: var(--bs-warning); }
   .libreoxi-log-nochange { color: var(--bs-success); }
   .libreoxi-log-error { color: var(--bs-danger); }
-  .libreoxi-log-tree-row td { border-bottom: 0; vertical-align: middle; }
+  .libreoxi-log-main-row td { vertical-align: middle; border-bottom: 0; }
   .libreoxi-log-tree-toggle { width: 2.2rem; text-align: center; }
-  .libreoxi-log-details summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; padding: 0; font-weight: 700; border-radius: 0.2rem; }
-  .libreoxi-log-details summary:hover { background: var(--bs-secondary-bg); }
-  .libreoxi-log-details summary::-webkit-details-marker { display: none; }
-  .libreoxi-log-details[open] summary { color: var(--bs-info); }
-  .libreoxi-log-detail-row td { border-top: 0; padding-top: 0; }
-  .libreoxi-log-detail { margin-left: 1.9rem; padding: 0.45rem 0.75rem; border-left: 2px solid var(--bs-border-color); background: var(--bs-tertiary-bg); }
+  .libreoxi-log-toggle { cursor: pointer; border: 0; background: transparent; color: inherit; width: 1.7rem; height: 1.7rem; padding: 0; font-weight: 700; border-radius: 0.2rem; }
+  .libreoxi-log-toggle:hover { background: var(--bs-secondary-bg); }
+  .libreoxi-log-toggle[aria-expanded="true"] { color: var(--bs-info); }
+  .libreoxi-log-detail-row { display: none; }
+  .libreoxi-log-detail-row td { border-top: 0; padding-top: 0.1rem; padding-bottom: 0.6rem; }
+  .libreoxi-log-detail { margin-left: 1.5rem; padding: 0.45rem 0.75rem; border-left: 2px solid var(--bs-border-color); background: var(--bs-tertiary-bg); }
 </style>
 
   <div class="card">
@@ -83,23 +83,31 @@
             {% if device_logs %}
               <div class="table-responsive">
                 <table class="table table-sm table-hover mb-0">
-                  <thead><tr><th>Date/time</th><th>Event</th><th class="text-end"> </th></tr></thead>
+                  <thead><tr><th>Date/time</th><th>Event</th><th class="text-end"></th></tr></thead>
                   <tbody>
                     {% for entry in device_logs %}
-                      <tr class="libreoxi-log-tree-row">
-                        <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
-                        <td>
-                          <span class="me-2">DEVICE BACKUP CHECK</span>
-                          {% if entry.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif entry.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif entry.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}
-                        </td>
-                        <td class="libreoxi-log-tree-toggle">
-                          {% with entry_hash=entry.message|log_hash %}
-                            <details class="libreoxi-log-details"><summary title="Details">⋮</summary>
-                              <div class="libreoxi-log-detail"><div class="text-muted small">{% if entry_hash %}SHA256{% else %}Information{% endif %}</div>{% if entry_hash %}<code>{{ entry_hash }}</code>{% else %}<span class="text-muted">No additional details available.</span>{% endif %}</div>
-                            </details>
-                          {% endwith %}
-                        </td>
-                      </tr>
+                      {% with detail_id='libreoxi-device-log-detail-'|add:forloop.counter %}
+                        <tr class="libreoxi-log-main-row">
+                          <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
+                          <td>
+                            <span class="me-2">DEVICE BACKUP CHECK</span>
+                            {% if entry.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif entry.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif entry.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}
+                          </td>
+                          <td class="libreoxi-log-tree-toggle">
+                            <button type="button" class="libreoxi-log-toggle" data-detail-target="{{ detail_id }}" aria-expanded="false" title="Details">⋮</button>
+                          </td>
+                        </tr>
+                        <tr id="{{ detail_id }}" class="libreoxi-log-detail-row">
+                          <td colspan="3">
+                            {% with entry_hash=entry.message|log_hash %}
+                              <div class="libreoxi-log-detail">
+                                <div class="text-muted small">{% if entry_hash %}SHA256{% else %}Information{% endif %}</div>
+                                {% if entry_hash %}<code>{{ entry_hash }}</code>{% else %}<span class="text-muted">No additional details available.</span>{% endif %}
+                              </div>
+                            {% endwith %}
+                          </td>
+                        </tr>
+                      {% endwith %}
                     {% endfor %}
                   </tbody>
                 </table>
@@ -116,6 +124,7 @@
             render(); setInterval(() => { if (seconds > 0) seconds -= 1; render(); }, 1000); setInterval(checkForScheduledRefresh, 5000);
           })();
           (() => { const boxes = Array.from(document.querySelectorAll('.libreoxi-revision')); const button = document.getElementById('libreoxi-compare'); const update = () => { const selected = boxes.filter(box => box.checked); button.disabled = selected.length !== 2; button.textContent = `Compare selected (${selected.length}/2)`; }; boxes.forEach(box => box.addEventListener('change', () => { const selected = boxes.filter(item => item.checked); if (selected.length > 2) box.checked = false; update(); })); button?.addEventListener('click', () => { const selected = boxes.filter(box => box.checked).map(box => box.value); if (selected.length !== 2) return; const url = new URL("{% url 'plugins:netbox_libreoxi:compare_config' device.pk %}", window.location.origin); url.searchParams.set('old', selected[1]); url.searchParams.set('new', selected[0]); window.location.href = url.toString(); }); update(); })();
+          (() => { document.querySelectorAll('.libreoxi-log-toggle').forEach((button) => { button.addEventListener('click', () => { const row = document.getElementById(button.dataset.detailTarget); if (!row) return; const open = row.style.display !== 'table-row'; row.style.display = open ? 'table-row' : 'none'; button.setAttribute('aria-expanded', open ? 'true' : 'false'); }); }); })();
         </script>
       {% endif %}
     </div>
