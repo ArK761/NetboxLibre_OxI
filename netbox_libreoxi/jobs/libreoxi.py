@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from netbox.jobs import JobRunner, system_job
 
@@ -19,10 +20,12 @@ class LibreOXIRefreshJob(JobRunner):
         if not settings or not settings.enabled or not settings.librenms_url or not settings.api_token_encrypted:
             return
 
-        marker = f"{settings.storage_root.rstrip('/')}/.last_refresh"
+        root = Path(settings.storage_root).expanduser().resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        marker = root / ".last_refresh"
         now = time.time()
         try:
-            last = float(open(marker, "r", encoding="ascii").read().strip())
+            last = float(marker.read_text(encoding="ascii").strip())
         except (FileNotFoundError, ValueError, OSError):
             last = 0
 
@@ -30,8 +33,7 @@ class LibreOXIRefreshJob(JobRunner):
             return
 
         try:
-            with open(marker, "w", encoding="ascii") as handle:
-                handle.write(str(now))
+            marker.write_text(str(now), encoding="ascii")
         except OSError:
             pass
 
