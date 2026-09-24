@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect, render, get_object_or_404
 
 from dcim.models import Device
 from netbox.views import generic
@@ -15,7 +15,7 @@ class DeviceLibreOXIView(generic.ObjectView):
     tab = ViewTab(label="LibreOXI", weight=500)
 
     def get(self, request, pk):
-        device = self.get_object(request, pk)
+        device = get_object_or_404(Device, pk=pk)
         return render(
             request,
             "netbox_libreoxi/device_tab.html",
