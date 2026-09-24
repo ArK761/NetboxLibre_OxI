@@ -67,7 +67,7 @@
                       <tr class="libreoxi-log-main-row">
                         <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
                         <td><span class="me-2">DEVICE BACKUP CHECK</span>{% if entry.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif entry.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif entry.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}</td>
-                        <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-detail-id="{{ detail_id }}" aria-expanded="false" title="Details">⋮</button></td>
+                        <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-detail-id="{{ detail_id }}" aria-expanded="false" title="Details" onclick="const d=document.getElementById(this.dataset.detailId);if(d){d.classList.toggle('open');this.setAttribute('aria-expanded',d.classList.contains('open')?'true':'false');}event.stopPropagation();">⋮</button></td>
                       </tr>
                       <tr id="{{ detail_id }}" class="libreoxi-log-detail-row">
                         <td colspan="3" class="p-0"><div class="libreoxi-log-detail">{% with entry_hash=entry.message|log_hash %}<div class="text-muted small">{% if entry_hash %}SHA256{% else %}Information{% endif %}</div>{% if entry_hash %}<code>{{ entry_hash }}</code>{% else %}<span class="text-muted">No additional details available.</span>{% endif %}{% endwith %}</div></td>
@@ -94,7 +94,7 @@
                           <strong>{{ entry.run_summary.devices }} device{{ entry.run_summary.devices|pluralize }}</strong>
                           <span class="text-muted libreoxi-run-inline ms-2">Started {{ entry.run_summary.started }} · Finished {{ entry.run_summary.finished }} · Duration {{ entry.run_summary.duration }}s</span>
                         </td>
-                        <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-detail-id="{{ detail_id }}" aria-expanded="false" title="Details">⋮</button></td>
+                        <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-detail-id="{{ detail_id }}" aria-expanded="false" title="Details" onclick="const d=document.getElementById(this.dataset.detailId);if(d){d.classList.toggle('open');this.setAttribute('aria-expanded',d.classList.contains('open')?'true':'false');}event.stopPropagation();">⋮</button></td>
                       </tr>
                       <tr id="{{ detail_id }}" class="libreoxi-log-detail-row">
                         <td colspan="3" class="p-0"><div class="libreoxi-log-detail libreoxi-run-summary">
@@ -118,20 +118,4 @@
     </div>
   {% endif %}
 </div>
-
-<script>
-(() => {
-  const toggle = (event) => {
-    const button = event.target.closest('.libreoxi-log-toggle-btn');
-    if (!button) return;
-    const detail = document.getElementById(button.dataset.detailId);
-    if (!detail) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const open = detail.classList.toggle('open');
-    button.setAttribute('aria-expanded', open ? 'true' : 'false');
-  };
-  document.addEventListener('click', toggle, true);
-})();
-</script>
 {% endblock %}
