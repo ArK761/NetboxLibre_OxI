@@ -1,5 +1,5 @@
 {% extends 'generic/object.html' %}
-{% load libreoxi_tags %}
+{% load libreoxi_tags static %}
 
 {% block content %}
 <style>
@@ -56,13 +56,9 @@
             const checkForScheduledRefresh = async () => { if (refreshPending || !lastCheck) return; try { const response = await fetch(window.location.href, { method: 'GET', cache: 'no-store', headers: { 'X-Requested-With': 'XMLHttpRequest' } }); if (!response.ok) return; const html = await response.text(); const doc = new DOMParser().parseFromString(html, 'text/html'); const remoteLastCheck = doc.getElementById('libreoxi-last-check')?.dataset.value || ''; const localLastCheck = lastCheck.dataset.value || ''; if (remoteLastCheck && remoteLastCheck !== localLastCheck) { refreshPending = true; window.location.reload(); } } catch (error) {} };
             render(); setInterval(() => { if (seconds > 0) seconds -= 1; render(); }, 1000); setInterval(checkForScheduledRefresh, 5000);
           })();
-          (() => {
-            const toggleDetail = (button) => { const id = button?.dataset.detailId; const detail = id ? document.getElementById(id) : null; if (!detail) return; const open = detail.classList.toggle('open'); button.setAttribute('aria-expanded', open ? 'true' : 'false'); };
-            document.querySelectorAll('.libreoxi-log-toggle-btn').forEach((button) => { button.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); toggleDetail(button); }); });
-          })();
-          (() => { const boxes = Array.from(document.querySelectorAll('.libreoxi-revision')); const button = document.getElementById('libreoxi-compare'); const update = () => { const selected = boxes.filter(box => box.checked); button.disabled = selected.length !== 2; button.textContent = `Compare selected (${selected.length}/2)`; }; boxes.forEach(box => box.addEventListener('change', () => { const selected = boxes.filter(item => item.checked); if (selected.length > 2) box.checked = false; update(); })); button?.addEventListener('click', () => { const selected = boxes.filter(box => box.checked).map(box => box.value); if (selected.length !== 2) return; const url = new URL("{% url 'plugins:netbox_libreoxi:compare_config' device.pk %}", window.location.origin); url.searchParams.set('old', selected[1]); url.searchParams.set('new', selected[0]); window.location.href = url.toString(); }); update(); })();
-          </script>
+        </script>
       {% endif %}
     </div>
   </div>
+  <script src="{% static 'netbox_libreoxi/logs.js' %}"></script>
 {% endblock content %}
