@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from difflib import HtmlDiff, SequenceMatcher
 
@@ -15,6 +16,74 @@ from .forms import LibreOXISettingsForm
 from .models import LibreOXISettings
 from .oxi import fetch_device, monitored_devices
 from .storage import device_dir, list_history, read_current
+
+
+def format_timestamp(value, settings):
+    if not value:
+        return "-"
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.astimezone(timezone.utc)
+        return parsed.strftime(settings.datetime_format)
+    except (ValueError, TypeError):
+        return value
+
+
+def format_revision(name, settings):
+    if name == "current.cfg":
+        return "current.cfg"
+    try:
+        parsed = datetime.strptime(name.removesuffix(".cfg"), "%Y-%m-%d_%H-%M-%S").replace(tzinfo=timezone.utc)
+        return parsed.strftime(settings.datetime_format)
+    except (ValueError, TypeError):
+        return name
+
+
+def read_device_logs(root, device, limit=100):
+    path = Path(root).expanduser().resolve() / "libreoxi.log"
+    if not path.exists():
+        return []
+    needle = str(device)
+    entries = []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    for line in reversed(lines):
+        if needle not in line:
+            continue
+        parts = line.split(" ", 1)
+        timestamp = parts[0] if parts else ""
+        message = parts[1] if len(parts) > 1 else line
+        entries.append({"timestamp": timestamp, "message": message})
+        if len(entries) >= limit:
+            break
+    return entries
+
+
+def read_all_logs(root, settings, limit=500):
+    path = Path(root).expanduser().resolve() / "libreoxi.log"
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+
+    entries = []
+    for line in reversed(lines):
+        parts = line.split(" ", 1)
+        timestamp = parts[0] if parts else ""
+        message = parts[1] if len(parts) > 1 else line
+        entries.append({
+            "timestamp": format_timestamp(timestamp, settings),
+            "message": message,
+        })
+        if len(entries) >= limit:
+            break
+    return entries
 
 
 def _history_path(settings, device, revision):
@@ -54,6 +123,7 @@ class DeviceLibreOXIView(generic.ObjectView):
         monitored = False
         last_check = None
         storage_error = None
+        device_logs = []
 
         if settings:
             monitored = monitored_devices(settings).filter(pk=device.pk).exists()
@@ -62,21 +132,29 @@ class DeviceLibreOXIView(generic.ObjectView):
                 directory = device_dir(settings.storage_root, device.pk, create=False)
                 marker = directory / "last_check"
                 if marker.exists():
-                    last_check = marker.read_text(encoding="utf-8").strip()
+                    last_check = format_timestamp(
+                        marker.read_text(encoding="utf-8").strip(), settings
+                    )
 
                 history_paths = [
                     p for p in list_history(settings.storage_root, device.pk)
                     if p.name != "current.cfg"
                 ]
-                history = [p.name for p in history_paths]
+                history = [
+                    {"name": p.name, "display": format_revision(p.name, settings)}
+                    for p in history_paths
+                ]
 
                 revision = request.GET.get("revision", "").strip()
-                if revision and revision in history:
+                if revision and any(item["name"] == revision for item in history):
                     selected_path = directory / revision
                     selected_config = selected_path.read_text(encoding="utf-8", errors="replace")
                     selected_name = revision
                 else:
                     selected_config = current
+                device_logs = read_device_logs(settings.storage_root, device)
+                for entry in device_logs:
+                    entry["timestamp"] = format_timestamp(entry["timestamp"], settings)
             except OSError as exc:
                 storage_error = f"LibreOXI storage is not accessible: {exc}"
 
@@ -96,6 +174,7 @@ class DeviceLibreOXIView(generic.ObjectView):
                 "history": history,
                 "last_check": last_check,
                 "storage_error": storage_error,
+                "device_logs": device_logs,
             },
         )
 
@@ -157,8 +236,8 @@ def compare_config(request, pk):
     html_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(
         old_lines,
         new_lines,
-        fromdesc=old_name,
-        todesc=new_name,
+        fromdesc=format_revision(old_name, settings),
+        todesc=format_revision(new_name, settings),
         context=False,
         numlines=3,
     )
@@ -237,6 +316,16 @@ def download_config(request, pk):
     response = HttpResponse(current, content_type="text/plain; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
+
+
+def logs_view(request):
+    settings = LibreOXISettings.objects.first()
+    logs = read_all_logs(settings.storage_root, settings) if settings else []
+    return render(
+        request,
+        "netbox_libreoxi/logs.html",
+        {"settings": settings, "logs": logs},
+    )
 
 
 def settings_view(request):
