@@ -1,9 +1,11 @@
 from pathlib import Path
+from difflib import HtmlDiff, SequenceMatcher
 
 from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
+from django.utils.safestring import mark_safe
 
 from dcim.models import Device
 from netbox.views import generic
@@ -13,6 +15,28 @@ from .forms import LibreOXISettingsForm
 from .models import LibreOXISettings
 from .oxi import fetch_device, monitored_devices
 from .storage import device_dir, list_history, read_current
+
+
+def _history_path(settings, device, revision):
+    if not revision or Path(revision).name != revision:
+        return None
+    directory = device_dir(settings.storage_root, device.pk, create=False)
+    history = {p.name for p in list_history(settings.storage_root, device.pk)}
+    if revision not in history:
+        return None
+    return directory / revision
+
+
+def _load_revision(settings, device, revision):
+    if revision == "current.cfg":
+        content, digest = read_current(settings.storage_root, device.pk)
+        return content, digest
+
+    path = _history_path(settings, device, revision)
+    if path is None:
+        return None, None
+    content = path.read_text(encoding="utf-8", errors="replace")
+    return content, None
 
 
 @register_model_view(Device, name="libreoxi", path="libreoxi")
@@ -94,6 +118,93 @@ class DeviceLibreOXIView(generic.ObjectView):
                 messages.error(request, f"Configuration was not changed: {result['error']}")
 
         return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
+
+
+def compare_config(request, pk):
+    device = get_object_or_404(Device, pk=pk)
+    settings = LibreOXISettings.objects.first()
+    if not settings or not monitored_devices(settings).filter(pk=device.pk).exists():
+        return HttpResponse("Device is not selected for LibreOXI monitoring.", status=404, content_type="text/plain")
+
+    old_name = request.GET.get("old", "").strip()
+    new_name = request.GET.get("new", "").strip()
+    if not old_name or not new_name or old_name == new_name:
+        return HttpResponse("Select two different configuration revisions.", status=400, content_type="text/plain")
+
+    try:
+        old_content, _ = _load_revision(settings, device, old_name)
+        new_content, _ = _load_revision(settings, device, new_name)
+    except OSError as exc:
+        return HttpResponse(f"LibreOXI storage is not accessible: {exc}", status=500, content_type="text/plain")
+
+    if old_content is None or new_content is None:
+        return HttpResponse("Configuration revision not found.", status=404, content_type="text/plain")
+
+    old_lines = old_content.splitlines()
+    new_lines = new_content.splitlines()
+    matcher = SequenceMatcher(None, old_lines, new_lines)
+    added = removed = changed = 0
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "insert":
+            added += j2 - j1
+        elif tag == "delete":
+            removed += i2 - i1
+        elif tag == "replace":
+            removed += i2 - i1
+            added += j2 - j1
+            changed += 1
+
+    html_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(
+        old_lines,
+        new_lines,
+        fromdesc=old_name,
+        todesc=new_name,
+        context=False,
+        numlines=3,
+    )
+
+    return render(
+        request,
+        "netbox_libreoxi/compare.html",
+        {
+            "object": device,
+            "device": device,
+            "tab": DeviceLibreOXIView.tab,
+            "old_name": old_name,
+            "new_name": new_name,
+            "added": added,
+            "removed": removed,
+            "changed": changed,
+            "diff_html": mark_safe(html_diff),
+        },
+    )
+
+
+def delete_revision(request, pk):
+    device = get_object_or_404(Device, pk=pk)
+    settings = LibreOXISettings.objects.first()
+    if request.method != "POST":
+        return HttpResponse("POST required.", status=405, content_type="text/plain")
+    if not settings or not monitored_devices(settings).filter(pk=device.pk).exists():
+        return HttpResponse("Device is not selected for LibreOXI monitoring.", status=404, content_type="text/plain")
+
+    revision = request.POST.get("revision", "").strip()
+    if revision in ("", "current.cfg"):
+        messages.error(request, "The current configuration cannot be deleted.")
+        return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
+
+    path = _history_path(settings, device, revision)
+    if path is None:
+        messages.error(request, "Configuration revision not found.")
+        return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
+
+    try:
+        path.unlink()
+        messages.success(request, f"Configuration revision {revision} was deleted.")
+    except OSError as exc:
+        messages.error(request, f"Configuration revision could not be deleted: {exc}")
+
+    return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
 
 
 def download_config(request, pk):
