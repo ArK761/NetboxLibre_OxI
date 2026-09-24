@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
 from difflib import HtmlDiff, SequenceMatcher
-import re
 
 from django.contrib import messages
 from django.http import HttpResponse
@@ -48,10 +47,9 @@ def _parse_log_line(line, settings):
     message = parts[1] if len(parts) > 1 else line
     timestamp = format_timestamp(timestamp, settings)
 
-    # Do not expose hashes in the human-readable audit log. The hashes remain
-    # in the stored configuration metadata and are still used for change detection.
-    message = re.sub(r"\s+hash=[0-9a-fA-F]+\b", "", message)
-
+    # Keep the original message because the UI uses the stored SHA256 as the
+    # expandable detail of each backup-check event. It is not shown in the
+    # compact event row itself.
     event = "INFO"
     device_name = None
     display_message = message
@@ -370,7 +368,6 @@ def logs_view(request):
         if selected_device:
             logs = read_device_logs(settings.storage_root, selected_device, settings)
 
-    # Show the most recent event next to each device in the tree.
     for device in devices:
         device_logs = read_device_logs(settings.storage_root, device, settings, limit=1)
         device.latest_log = device_logs[0] if device_logs else None
