@@ -1,4 +1,5 @@
 import os
+import tempfile
 from pathlib import Path
 
 from django import forms
@@ -74,6 +75,30 @@ class LibreOXISettingsForm(forms.ModelForm):
             raise forms.ValidationError(
                 f"Storage directory is not writable by the NetBox process: {path}."
             )
+
+        # Do a real write/delete test. This verifies that the NetBox process
+        # can actually create files in the selected directory, including when
+        # ACLs or other permission mechanisms make os.access() insufficient.
+        fd = None
+        probe = None
+        try:
+            fd, probe = tempfile.mkstemp(
+                prefix=".libreoxi-write-test-",
+                dir=path,
+            )
+            os.write(fd, b"libreoxi")
+        except OSError as exc:
+            raise forms.ValidationError(
+                f"NetBox does not have write permission for storage directory: {path} ({exc})."
+            ) from exc
+        finally:
+            if fd is not None:
+                os.close(fd)
+            if probe is not None:
+                try:
+                    os.unlink(probe)
+                except OSError:
+                    pass
 
         return str(path.resolve())
 
