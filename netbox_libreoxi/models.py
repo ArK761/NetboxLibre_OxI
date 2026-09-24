@@ -19,16 +19,8 @@ class LibreOXISettings(models.Model):
     retention_revisions = models.PositiveIntegerField(default=100)
     verify_tls = models.BooleanField(default=True)
     enabled = models.BooleanField(default=True)
-    device_roles = models.ManyToManyField(
-        "dcim.DeviceRole",
-        blank=True,
-        related_name="libreoxi_settings",
-    )
-    devices = models.ManyToManyField(
-        "dcim.Device",
-        blank=True,
-        related_name="libreoxi_settings",
-    )
+    device_role_ids = models.JSONField(default=list, blank=True)
+    device_ids = models.JSONField(default=list, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
