@@ -1,0 +1,59 @@
+{% extends 'generic/object.html' %}
+
+{% block content %}
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>LibreOXI configuration comparison</strong>
+      <a class="btn btn-secondary btn-sm" href="{% url 'dcim:device_libreoxi' device.pk %}">Back to LibreOXI</a>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="text-muted">Added lines</div>
+              <strong class="text-success">+{{ added }}</strong>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="text-muted">Removed lines</div>
+              <strong class="text-danger">-{{ removed }}</strong>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="text-muted">Changed blocks</div>
+              <strong>{{ changed }}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <strong>Older:</strong> <code>{{ old_name }}</code>
+        <span class="mx-2">→</span>
+        <strong>Newer:</strong> <code>{{ new_name }}</code>
+      </div>
+
+      <div class="table-responsive libreoxi-diff">
+        {{ diff_html }}
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .libreoxi-diff table.diff { width: 100%; font-family: var(--bs-font-monospace); font-size: .875rem; }
+    .libreoxi-diff .diff_header { background: var(--bs-tertiary-bg); }
+    .libreoxi-diff td, .libreoxi-diff th { padding: .25rem .5rem; vertical-align: top; }
+    .libreoxi-diff .diff_next { display: none; }
+    .libreoxi-diff .diff_add { background: rgba(25, 135, 84, .18); }
+    .libreoxi-diff .diff_sub { background: rgba(220, 53, 69, .18); }
+    .libreoxi-diff .diff_chg { background: rgba(255, 193, 7, .25); }
+    .libreoxi-diff td.diff_header { white-space: nowrap; }
+  </style>
+{% endblock content %}
