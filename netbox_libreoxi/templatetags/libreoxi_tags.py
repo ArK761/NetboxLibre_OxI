@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from django import template
+from django.utils import timezone as django_timezone
 
 register = template.Library()
 
@@ -24,10 +25,14 @@ def next_check_info(settings):
     interval = max(1, int(settings.check_interval_minutes)) * 60
     next_ts = last + interval
     remaining = max(0, int(next_ts - time.time()))
-    next_dt = datetime.fromtimestamp(next_ts, tz=timezone.utc)
+
+    # The marker is an epoch timestamp and therefore timezone-neutral.
+    # Convert it to Django's configured local timezone only for display.
+    next_dt_utc = datetime.fromtimestamp(next_ts, tz=timezone.utc)
+    next_dt = django_timezone.localtime(next_dt_utc)
 
     try:
-        display = next_dt.astimezone(timezone.utc).strftime(settings.datetime_format)
+        display = next_dt.strftime(settings.datetime_format)
     except (TypeError, ValueError):
         display = next_dt.strftime("%d.%m.%Y %H:%M:%S")
 
