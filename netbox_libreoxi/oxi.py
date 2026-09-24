@@ -9,6 +9,9 @@ from .models import LibreOXISettings
 from .storage import append_log, cleanup, device_dir, store_if_changed
 
 
+NOT_MONITORED_ERROR = "Device is not enabled for LibreOXI monitoring. Select its Device Role or add the device explicitly in LibreOXI Settings."
+
+
 def monitored_devices(settings):
     from dcim.models import Device
 
@@ -16,6 +19,10 @@ def monitored_devices(settings):
     device_ids = [int(value) for value in (settings.device_ids or [])]
     devices = Device.objects.filter(role_id__in=role_ids)
     return (devices | Device.objects.filter(pk__in=device_ids)).distinct().order_by("pk")
+
+
+def is_monitored(settings, device):
+    return monitored_devices(settings).filter(pk=device.pk).exists()
 
 
 def device_ip(device):
@@ -50,6 +57,12 @@ def _extract_config(response: requests.Response):
 
 
 def fetch_device(settings: LibreOXISettings, device):
+    # Enforce the monitoring allow-list at the actual fetch layer as well as in
+    # the UI. This prevents manual refreshes, jobs, or future callers from
+    # fetching a device which is not enabled by Device Role or explicit Device.
+    if not is_monitored(settings, device):
+        return {"ok": False, "error": NOT_MONITORED_ERROR, "not_monitored": True}
+
     ip = device_ip(device)
     if not ip:
         return {"ok": False, "error": "Device has no primary IPv4 address."}
