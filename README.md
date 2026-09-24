@@ -76,12 +76,16 @@ The comparison provides:
 ### Monitoring, refresh and audit logs
 
 - Automatic checks run asynchronously according to the configured check interval.
+- The scheduler wakes periodically, but the configured `Check interval minutes` determines when a real device refresh is performed.
+- Scheduled refresh checks use a maximum of **5 concurrent device checks**. With 200 monitored devices, five LibreNMS API requests can therefore run at the same time instead of checking all devices sequentially.
 - Monitoring can be restricted by Device Role and/or explicitly selected devices.
 - Every attempted device check is written to the LibreOXI log, including successful checks where no configuration change was detected.
 - Configuration changes are logged with the device and resulting SHA-256 hash.
 - The device's LibreOXI tab displays recent activity for that device.
+- The device page shows the next scheduled check time and a live countdown when the scheduler has completed at least one scheduled refresh.
 - The LibreOXI main menu contains a global Logs page showing checks and configuration changes across all monitored devices.
 - Logs and configuration history are stored on the configured filesystem storage root.
+- Log rows keep the SHA-256 available behind an expandable details control while keeping the normal audit view compact.
 
 ### Date/time display format
 
@@ -127,6 +131,7 @@ netbox_libreoxi/
   models/
   views/
   templates/
+  templatetags/
   migrations/
 tests/
 ```
