@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from time import monotonic
 
 from django.db import close_old_connections
 from django.utils import timezone
@@ -44,8 +45,6 @@ class LibreOXIRefreshJob(JobRunner):
         try:
             last_slot = float(marker.read_text(encoding="ascii").strip())
         except (FileNotFoundError, ValueError, OSError):
-            # Behave like cron: do not run immediately just because NetBox was
-            # restarted. The first scheduled run is the next wall-clock slot.
             try:
                 marker.write_text(str(current_slot_ts), encoding="ascii")
             except OSError:
@@ -61,17 +60,38 @@ class LibreOXIRefreshJob(JobRunner):
             pass
 
         devices = list(monitored_devices(settings))
+        started_at = timezone.now()
+        started_monotonic = monotonic()
         append_log(
             settings.storage_root,
-            f"INFO scheduled refresh started devices={len(devices)} concurrency={MAX_CONCURRENT_CHECKS}",
+            f"INFO scheduled refresh started run={started_at.isoformat(timespec='seconds')} devices={len(devices)} concurrency={MAX_CONCURRENT_CHECKS}",
         )
 
+        counts = {"CHANGE": 0, "NOCHANGE": 0, "ERROR": 0}
         with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CHECKS, thread_name_prefix="libreoxi") as executor:
             futures = [executor.submit(_fetch_device_worker, settings, device) for device in devices]
             for future in as_completed(futures):
                 try:
-                    future.result()
+                    result = future.result()
+                    if result.get("ok"):
+                        counts["CHANGE" if result.get("changed") else "NOCHANGE"] += 1
+                    else:
+                        counts["ERROR"] += 1
                 except Exception as exc:
+                    counts["ERROR"] += 1
                     append_log(settings.storage_root, f"ERROR scheduled device check failed: {exc}")
 
-        append_log(settings.storage_root, "INFO scheduled refresh finished")
+        finished_at = timezone.now()
+        duration_seconds = max(0, int(round(monotonic() - started_monotonic)))
+        append_log(
+            settings.storage_root,
+            "INFO scheduled refresh finished "
+            f"run={started_at.isoformat(timespec='seconds')} "
+            f"started={started_at.isoformat(timespec='seconds')} "
+            f"finished={finished_at.isoformat(timespec='seconds')} "
+            f"devices={len(devices)} "
+            f"change={counts['CHANGE']} "
+            f"nochange={counts['NOCHANGE']} "
+            f"error={counts['ERROR']} "
+            f"duration={duration_seconds}",
+        )
