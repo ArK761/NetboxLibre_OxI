@@ -35,39 +35,24 @@ The default LibreOXI storage path is `/opt/libreoxi`.
 
 ### Upgrade
 
-For a later plugin upgrade, use the same pip command:
-
-```bash
-pip install --upgrade --force-reinstall git+https://github.com/ArK761/NetboxLibre_OxI.git
-```
-
-If the release contains new database migrations, run:
-
-```bash
-cd /opt/netbox/netbox
-./manage.py migrate netbox_libreoxi
-```
-
-Then restart NetBox:
-
-```bash
-systemctl restart netbox.service
-```
+For a later plugin upgrade, use the same pip command. If the release contains new database migrations, run the migration command shown above and restart NetBox.
 
 ## Features
 
 ### Configuration snapshots and history
 
 - LibreNMS/OXI is the configuration source.
-- Configuration is retrieved through the LibreNMS API.
+- Configuration is retrieved through the LibreNMS API using the device primary IPv4 address.
 - The API JSON response is parsed and only the `config` content is stored as the device configuration.
 - The NetBox database stores plugin settings and metadata only.
-- Configuration files, SHA-256 hashes and revision history are stored on the filesystem.
+- Configuration files, SHA-256 hashes, history and logs are stored on the filesystem.
 - A failed, invalid or empty API response must never overwrite the last valid configuration.
 - If the configuration hash is unchanged, no new revision is created.
 - If the hash changes, the new configuration is stored as a timestamped snapshot and becomes the current configuration.
 - History retention is controlled by age and maximum revision count.
 - Device pages provide a LibreOXI tab and a manual Refresh action.
+- Manual Refresh is allowed only for devices selected by Device Role or explicitly selected as an individual device in LibreOXI Settings.
+- The same monitoring scope is enforced by the backend for scheduled and manual configuration retrieval.
 - The device page can display the current configuration or any stored historical revision.
 - A selected configuration can be copied to the clipboard or downloaded as `<device-IP>.txt`.
 - Historical revisions can be deleted individually; the current configuration cannot be deleted from the history view.
@@ -88,19 +73,42 @@ The comparison provides:
 - a simple summary of added/removed/changed content;
 - the original configuration snapshots remain unchanged by the comparison.
 
-The generic diff is intentionally vendor-neutral. Vendor-specific semantic analysis (for example, identifying a VLAN addition or an interface-name change) can be added later as an optional analyzer without changing the underlying snapshot history.
+### Monitoring, refresh and audit logs
 
-### Monitoring and refresh
-
-- Automatic checks run asynchronously.
+- Automatic checks run asynchronously according to the configured check interval.
 - Monitoring can be restricted by Device Role and/or explicitly selected devices.
-- Plugin settings are editable through the NetBox web UI and take effect without restarting NetBox.
+- Every attempted device check is written to the LibreOXI log, including successful checks where no configuration change was detected.
+- Configuration changes are logged with the device and resulting SHA-256 hash.
+- The device's LibreOXI tab displays recent activity for that device.
+- The LibreOXI main menu contains a global Logs page showing checks and configuration changes across all monitored devices.
+- Logs and configuration history are stored on the configured filesystem storage root.
+
+### Date/time display format
+
+LibreOXI stores timestamps internally in UTC/ISO form. The Settings page provides a selectable display format so the same stored timestamps can be shown in a preferred format without changing the stored data.
+
+Available formats include:
+
+- `24.09.2026 18:06:06` (EU);
+- `24/09/2026 18:06:06` (EU slash);
+- `2026-09-24 18:06:06` (ISO-like);
+- `24.09.2026 18:06` (EU without seconds);
+- `2026-09-24T18:06:06` (ISO 8601).
+
+The selected display format applies to device check times, configuration history timestamps, and LibreOXI logs. It does not alter timestamps stored internally or configuration snapshot filenames.
+
+### Settings and storage
+
+- Plugin settings are editable through the NetBox web UI.
+- The configured storage path is validated when settings are saved: it must exist, be a directory, and be writable by the NetBox process.
+- A real temporary file write/delete test is performed during validation.
+- The configured storage path is used immediately by device views and scheduled refresh jobs.
 
 ## Initial design
 
 - LibreNMS/OXI is the configuration source.
 - The NetBox database stores plugin settings and metadata only.
-- Configuration files, SHA-256 hashes and revision history are stored on the filesystem.
+- Configuration files, SHA-256 hashes, history and logs are stored on the filesystem.
 - A failed or invalid API response must never overwrite the last valid configuration.
 - Automatic checks run asynchronously.
 - Device pages provide a LibreOXI tab and a manual Refresh action.
