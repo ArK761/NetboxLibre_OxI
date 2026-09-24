@@ -8,6 +8,7 @@ from dcim.models import Device, DeviceRole
 from utilities.forms.fields import DynamicModelMultipleChoiceField
 
 from .models import LibreOXISettings
+from .scheduler import validate_cron_schedule
 
 
 DATETIME_FORMAT_CHOICES = (
@@ -18,15 +19,15 @@ DATETIME_FORMAT_CHOICES = (
     ("%Y-%m-%dT%H:%M:%S", "2026-09-24T18:06:06 (ISO 8601)"),
 )
 
-
-CHECK_INTERVAL_CHOICES = (
-    (5, "5 minutes"),
-    (10, "10 minutes"),
-    (15, "15 minutes"),
-    (20, "20 minutes"),
-    (30, "30 minutes"),
-    (60, "1 hour"),
-    (90, "1 hour 30 minutes"),
+SCHEDULE_PRESETS = (
+    ("*/5 * * * *", "Every 5 minutes — :00, :05, :10, ..."),
+    ("*/10 * * * *", "Every 10 minutes — :00, :10, :20, ..."),
+    ("*/15 * * * *", "Every 15 minutes — :00, :15, :30, :45"),
+    ("*/20 * * * *", "Every 20 minutes — :00, :20, :40"),
+    ("*/30 * * * *", "Every 30 minutes — :00, :30"),
+    ("0 * * * *", "Every full hour — :00"),
+    ("0 1 * * *", "Every day at 01:00"),
+    ("0 0 * * *", "Every day at 00:00"),
 )
 
 
@@ -53,11 +54,20 @@ class LibreOXISettingsForm(forms.ModelForm):
         choices=DATETIME_FORMAT_CHOICES,
         help_text="Only the displayed date/time format changes. Stored timestamps remain UTC/ISO internally.",
     )
-    check_interval_minutes = forms.TypedChoiceField(
-        label="Check interval",
-        choices=CHECK_INTERVAL_CHOICES,
-        coerce=int,
-        help_text="Select how often scheduled device checks run. Short intervals can increase LibreNMS and NetBox load.",
+    schedule_cron = forms.CharField(
+        label="Schedule (cron)",
+        widget=forms.Textarea(attrs={"rows": 3, "spellcheck": "false", "placeholder": "*/30 * * * *"}),
+        help_text=(
+            "True cron schedule. Examples: */30 * * * * = every full 30 minutes; "
+            "0 * * * * = every full hour; 0 1 * * * = every day at 01:00. "
+            "You may enter multiple cron lines for complex schedules."
+        ),
+    )
+    schedule_preset = forms.ChoiceField(
+        label="Cron preset",
+        choices=(("", "— select a preset —"),) + SCHEDULE_PRESETS,
+        required=False,
+        help_text="Selecting a preset fills the cron field; the cron field is the value that is saved.",
     )
 
     class Meta:
@@ -68,7 +78,8 @@ class LibreOXISettingsForm(forms.ModelForm):
             "api_token",
             "storage_root",
             "request_timeout",
-            "check_interval_minutes",
+            "schedule_cron",
+            "schedule_preset",
             "retention_days",
             "retention_revisions",
             "verify_tls",
@@ -81,6 +92,7 @@ class LibreOXISettingsForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["api_token"].initial = self.instance.api_token_encrypted
+        self.fields["schedule_preset"].initial = ""
         if self.instance.pk:
             self.fields["device_roles"].initial = DeviceRole.objects.filter(
                 pk__in=self.instance.device_role_ids or []
@@ -93,7 +105,6 @@ class LibreOXISettingsForm(forms.ModelForm):
         value = self.cleaned_data["storage_root"].strip()
         if not value:
             raise forms.ValidationError("Storage path is required.")
-
         path = Path(value).expanduser()
         if not path.is_absolute():
             raise forms.ValidationError("Storage path must be an absolute path.")
@@ -107,14 +118,10 @@ class LibreOXISettingsForm(forms.ModelForm):
             raise forms.ValidationError(
                 f"Storage directory is not writable by the NetBox process: {path}."
             )
-
         fd = None
         probe = None
         try:
-            fd, probe = tempfile.mkstemp(
-                prefix=".libreoxi-write-test-",
-                dir=path,
-            )
+            fd, probe = tempfile.mkstemp(prefix=".libreoxi-write-test-", dir=path)
             os.write(fd, b"libreoxi")
         except OSError as exc:
             raise forms.ValidationError(
@@ -128,8 +135,17 @@ class LibreOXISettingsForm(forms.ModelForm):
                     os.unlink(probe)
                 except OSError:
                     pass
-
         return str(path.resolve())
+
+    def clean_schedule_cron(self):
+        value = self.cleaned_data["schedule_cron"].strip()
+        preset = self.cleaned_data.get("schedule_preset")
+        if preset:
+            value = preset
+        try:
+            return validate_cron_schedule(value)
+        except ValueError as exc:
+            raise forms.ValidationError(str(exc)) from exc
 
     def save(self, commit=True):
         instance = super().save(commit=False)
