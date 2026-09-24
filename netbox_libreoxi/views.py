@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django.contrib import messages
+from django.http import HttpResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
 
@@ -76,6 +77,28 @@ class DeviceLibreOXIView(generic.ObjectView):
                 messages.error(request, f"Configuration was not changed: {result['error']}")
 
         return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
+
+
+def download_config(request, pk):
+    device = get_object_or_404(Device, pk=pk)
+    settings = LibreOXISettings.objects.first()
+
+    if not settings or not monitored_devices(settings).filter(pk=device.pk).exists():
+        return HttpResponse("Device is not selected for LibreOXI monitoring.", status=404, content_type="text/plain")
+
+    try:
+        current, _ = read_current(settings.storage_root, device.pk)
+    except OSError as exc:
+        return HttpResponse(f"LibreOXI storage is not accessible: {exc}", status=500, content_type="text/plain")
+
+    if not current:
+        return HttpResponse("No configuration is stored for this device.", status=404, content_type="text/plain")
+
+    ip = device.primary_ip4.address.ip if device.primary_ip4 else None
+    filename = f"{ip}.txt" if ip else f"device-{device.pk}.txt"
+    response = HttpResponse(current, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 def settings_view(request):
