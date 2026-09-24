@@ -1,4 +1,5 @@
 {% extends 'base/layout.html' %}
+{% load libreoxi_tags %}
 
 {% block title %}LibreOXI Logs{% endblock %}
 
@@ -11,6 +12,10 @@
   .libreoxi-log-change { color: var(--bs-warning); }
   .libreoxi-log-nochange { color: var(--bs-success); }
   .libreoxi-log-error { color: var(--bs-danger); }
+  .libreoxi-log-details summary { cursor: pointer; list-style: none; display: inline-block; padding: 0 0.35rem; font-weight: 700; }
+  .libreoxi-log-details summary::-webkit-details-marker { display: none; }
+  .libreoxi-log-details[open] summary { color: var(--bs-info); }
+  .libreoxi-log-detail-box { margin-top: 0.35rem; padding: 0.5rem; background: var(--bs-tertiary-bg); border-radius: 0.25rem; }
 </style>
 
 <div class="card libreoxi-log-page">
@@ -79,6 +84,17 @@
                         {% elif entry.event == 'ERROR' %}
                           <span class="libreoxi-log-event libreoxi-log-error">ERROR</span>
                         {% endif %}
+                        {% with entry_hash=entry.message|log_hash %}
+                          {% if entry_hash %}
+                            <details class="libreoxi-log-details d-inline-block ms-1">
+                              <summary title="Details">⋮</summary>
+                              <div class="libreoxi-log-detail-box">
+                                <div class="text-muted">SHA256</div>
+                                <code>{{ entry_hash }}</code>
+                              </div>
+                            </details>
+                          {% endif %}
+                        {% endwith %}
                       </td>
                     </tr>
                   {% endfor %}
