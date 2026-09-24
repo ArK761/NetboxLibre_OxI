@@ -17,7 +17,10 @@ def migrate_interval_to_cron(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("netbox_libreoxi", "0001_initial")]
+    # This migration was added after the existing 0002 -> 0003 -> 0004 chain.
+    # The filename number is retained for compatibility; dependency order is
+    # what matters to Django.
+    dependencies = [("netbox_libreoxi", "0004_datetime_format")]
 
     operations = [
         migrations.AddField(
