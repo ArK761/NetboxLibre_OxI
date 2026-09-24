@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-libreoxi"
+version = "0.1.0"
+description = "NetBox plugin for LibreNMS Oxidized/OXI configuration history"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.entry-points."netbox_plugins"]
+netbox_libreoxi = "netbox_libreoxi:NetBoxLibreOXIConfig"
+
+[tool.setuptools.packages.find]
+include = ["netbox_libreoxi*"]
