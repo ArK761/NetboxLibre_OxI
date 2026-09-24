@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 
 from django import template
@@ -17,22 +16,16 @@ def next_check_info(settings):
     if not settings:
         return {"available": False}
 
-    marker = Path(settings.storage_root).expanduser().resolve() / ".last_refresh"
+    marker = Path(settings.storage_root).expanduser().resolve() / ".last_cron_slot"
     try:
         last_slot_ts = float(marker.read_text(encoding="ascii").strip())
     except (FileNotFoundError, ValueError, OSError):
         last_slot_ts = None
 
     try:
-        next_dt = next_scheduled_check(django_timezone.now(), settings.check_interval_minutes)
+        now = django_timezone.now()
+        next_dt = next_scheduled_check(now, settings.schedule_cron)
     except (TypeError, ValueError):
-        return {"available": False}
-
-    # If the current scheduled slot has already been executed, next_scheduled_check()
-    # returns the following slot. If the marker is from an older slot, the same
-    # result is still the next wall-clock slot from now.
-    now = django_timezone.now()
-    if next_dt <= now:
         return {"available": False}
 
     remaining = max(0, int(next_dt.timestamp() - now.timestamp()))
