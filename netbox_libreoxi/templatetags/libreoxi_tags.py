@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import re
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from django import template
 from django.utils import timezone as django_timezone
+
+from ..scheduler import next_scheduled_check
 
 register = template.Library()
 
@@ -18,29 +19,34 @@ def next_check_info(settings):
 
     marker = Path(settings.storage_root).expanduser().resolve() / ".last_refresh"
     try:
-        last = float(marker.read_text(encoding="ascii").strip())
+        last_slot_ts = float(marker.read_text(encoding="ascii").strip())
     except (FileNotFoundError, ValueError, OSError):
-        return {"available": False}
-
-    interval = max(1, int(settings.check_interval_minutes)) * 60
-    next_ts = last + interval
-    remaining = max(0, int(next_ts - time.time()))
-
-    # The marker is an epoch timestamp and therefore timezone-neutral.
-    # Convert it to Django's configured local timezone only for display.
-    next_dt_utc = datetime.fromtimestamp(next_ts, tz=timezone.utc)
-    next_dt = django_timezone.localtime(next_dt_utc)
+        last_slot_ts = None
 
     try:
-        display = next_dt.strftime(settings.datetime_format)
+        next_dt = next_scheduled_check(django_timezone.now(), settings.check_interval_minutes)
     except (TypeError, ValueError):
-        display = next_dt.strftime("%d.%m.%Y %H:%M:%S")
+        return {"available": False}
+
+    # If the current scheduled slot has already been executed, next_scheduled_check()
+    # returns the following slot. If the marker is from an older slot, the same
+    # result is still the next wall-clock slot from now.
+    now = django_timezone.now()
+    if next_dt <= now:
+        return {"available": False}
+
+    remaining = max(0, int(next_dt.timestamp() - now.timestamp()))
+    try:
+        display = django_timezone.localtime(next_dt).strftime(settings.datetime_format)
+    except (TypeError, ValueError):
+        display = django_timezone.localtime(next_dt).strftime("%d.%m.%Y %H:%M:%S")
 
     return {
         "available": True,
         "display": display,
         "iso": next_dt.isoformat(),
         "seconds": remaining,
+        "last_slot": last_slot_ts,
     }
 
 
