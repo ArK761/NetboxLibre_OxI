@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,3 +37,11 @@ def next_check_info(settings):
         "iso": next_dt.isoformat(),
         "seconds": remaining,
     }
+
+
+@register.filter
+def log_hash(value):
+    if not value:
+        return ""
+    match = re.search(r"\bhash=([0-9a-fA-F]{64})\b", str(value))
+    return match.group(1) if match else ""
