@@ -3,36 +3,98 @@
 {% block title %}LibreOXI Logs{% endblock %}
 
 {% block content %}
-<div class="card">
+<style>
+  .libreoxi-log-page { font-size: 0.88rem; }
+  .libreoxi-log-tree .list-group-item { background: transparent; border-color: var(--bs-border-color); }
+  .libreoxi-log-tree .selected { background: var(--bs-secondary-bg); }
+  .libreoxi-log-event { font-weight: 600; }
+  .libreoxi-log-change { color: var(--bs-warning); }
+  .libreoxi-log-nochange { color: var(--bs-success); }
+  .libreoxi-log-error { color: var(--bs-danger); }
+</style>
+
+<div class="card libreoxi-log-page">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <h5 class="card-title mb-0">LibreOXI Logs</h5>
+    <strong>LibreOXI Logs</strong>
     <a class="btn btn-primary btn-sm" href="{% url 'plugins:netbox_libreoxi:settings' %}">Settings</a>
   </div>
-  <div class="card-body p-0">
-    {% if not settings %}
-      <div class="p-3 text-muted">LibreOXI is not configured.</div>
-    {% elif logs %}
-      <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Date/time</th>
-              <th>Event</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for entry in logs %}
-              <tr>
-                <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
-                <td>{{ entry.message }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+
+  {% if not settings %}
+    <div class="card-body text-muted">LibreOXI is not configured.</div>
+  {% else %}
+    <div class="row g-0">
+      <div class="col-md-4 border-end libreoxi-log-tree">
+        <div class="p-2 text-muted">Devices</div>
+        <div class="list-group list-group-flush">
+          {% for device in devices %}
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_device and selected_device.pk == device.pk %}selected{% endif %}"
+               href="?device={{ device.pk }}">
+              <span>
+                <strong>{{ device }}</strong>
+                {% if device.primary_ip4 %}<small class="text-muted d-block">{{ device.primary_ip4.address.ip }}</small>{% endif %}
+              </span>
+              {% if device.latest_log %}
+                {% if device.latest_log.event == 'CHANGE' %}
+                  <span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>
+                {% elif device.latest_log.event == 'NOCHANGE' %}
+                  <span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>
+                {% elif device.latest_log.event == 'ERROR' %}
+                  <span class="libreoxi-log-event libreoxi-log-error">ERROR</span>
+                {% endif %}
+              {% endif %}
+            </a>
+          {% empty %}
+            <div class="p-3 text-muted">No devices are selected for LibreOXI monitoring.</div>
+          {% endfor %}
+        </div>
       </div>
-    {% else %}
-      <div class="p-3 text-muted">No LibreOXI log entries.</div>
-    {% endif %}
-  </div>
+
+      <div class="col-md-8">
+        {% if selected_device %}
+          <div class="p-3 border-bottom">
+            <strong>{{ selected_device }}</strong>
+            {% if selected_device.primary_ip4 %}
+              <span class="text-muted ms-2">{{ selected_device.primary_ip4.address.ip }}</span>
+            {% endif %}
+          </div>
+          {% if logs %}
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Date/time</th>
+                    <th>Event</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for entry in logs %}
+                    <tr>
+                      <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
+                      <td>
+                        <span class="me-2">{{ entry.display_message }}</span>
+                        {% if entry.event == 'CHANGE' %}
+                          <span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>
+                        {% elif entry.event == 'NOCHANGE' %}
+                          <span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>
+                        {% elif entry.event == 'ERROR' %}
+                          <span class="libreoxi-log-event libreoxi-log-error">ERROR</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="p-3 text-muted">No LibreOXI checks recorded for this device.</div>
+          {% endif %}
+        {% else %}
+          <div class="p-4 text-muted">
+            Select a device from the list to view its LibreOXI backup checks.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
 </div>
 {% endblock %}
