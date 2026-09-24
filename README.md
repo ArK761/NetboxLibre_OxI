@@ -4,45 +4,54 @@ NetBox plugin for monitoring and storing network device configurations retrieved
 
 ## Installation / upgrade
 
-The plugin itself is installed or upgraded using the standard pip command:
+Install or upgrade the plugin with the standard pip command:
 
 ```bash
 pip install --upgrade --force-reinstall git+https://github.com/ArK761/NetboxLibre_OxI.git
 ```
 
-LibreOXI also requires a filesystem storage directory. Run the repository installer once on the NetBox server to create it with the correct ownership and permissions and to run the plugin migrations:
+After installing the plugin, create the LibreOXI filesystem storage directory manually on the NetBox server. The NetBox service user must own the directory because the plugin writes configurations, hashes, history and logs there.
 
 ```bash
-sudo ./scripts/install.sh
+mkdir -p /opt/libreoxi
+chown netbox:netbox /opt/libreoxi
+chmod 750 /opt/libreoxi
 ```
 
-The installer creates:
-
-```text
-/opt/libreoxi
-owner: netbox:netbox
-mode: 750
-```
-
-The installer uses the same pip install/upgrade command shown above, then runs:
-
-```bash
-/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py migrate netbox_libreoxi --no-input
-```
-
-### Manual installation
-
-When the storage directory has already been created, the plugin can be installed or upgraded directly with:
-
-```bash
-pip install --upgrade --force-reinstall git+https://github.com/ArK761/NetboxLibre_OxI.git
-```
-
-Then run the LibreOXI migration:
+Then run the plugin migration:
 
 ```bash
 cd /opt/netbox/netbox
 ./manage.py migrate netbox_libreoxi
+```
+
+Restart the NetBox service after installation or upgrade:
+
+```bash
+systemctl restart netbox.service
+```
+
+The default LibreOXI storage path is `/opt/libreoxi`.
+
+### Upgrade
+
+For a later plugin upgrade, use the same pip command:
+
+```bash
+pip install --upgrade --force-reinstall git+https://github.com/ArK761/NetboxLibre_OxI.git
+```
+
+If the release contains new database migrations, run:
+
+```bash
+cd /opt/netbox/netbox
+./manage.py migrate netbox_libreoxi
+```
+
+Then restart NetBox:
+
+```bash
+systemctl restart netbox.service
 ```
 
 ## Initial design
@@ -71,6 +80,4 @@ netbox_libreoxi/
   templates/
   migrations/
 tests/
-scripts/
-  install.sh
 ```
