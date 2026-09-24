@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from django.db import close_old_connections
+from django.utils import timezone
 from netbox.jobs import JobRunner, system_job
 
 from ..models import LibreOXISettings
 from ..oxi import fetch_device, monitored_devices
+from ..scheduler import schedule_slot
 from ..storage import append_log
 
 
@@ -36,17 +37,26 @@ class LibreOXIRefreshJob(JobRunner):
         root = Path(settings.storage_root).expanduser().resolve()
         root.mkdir(parents=True, exist_ok=True)
         marker = root / ".last_refresh"
-        now = time.time()
-        try:
-            last = float(marker.read_text(encoding="ascii").strip())
-        except (FileNotFoundError, ValueError, OSError):
-            last = 0
+        now = timezone.now()
+        current_slot, _next_slot = schedule_slot(now, settings.check_interval_minutes)
+        current_slot_ts = current_slot.timestamp()
 
-        if now - last < settings.check_interval_minutes * 60:
+        try:
+            last_slot = float(marker.read_text(encoding="ascii").strip())
+        except (FileNotFoundError, ValueError, OSError):
+            # Behave like cron: do not run immediately just because NetBox was
+            # restarted. The first scheduled run is the next wall-clock slot.
+            try:
+                marker.write_text(str(current_slot_ts), encoding="ascii")
+            except OSError:
+                pass
+            return
+
+        if last_slot >= current_slot_ts:
             return
 
         try:
-            marker.write_text(str(now), encoding="ascii")
+            marker.write_text(str(current_slot_ts), encoding="ascii")
         except OSError:
             pass
 
