@@ -7,8 +7,8 @@ class NetBoxLibreOXIConfig(PluginConfig):
     description = "Retrieve and track network device configurations from LibreNMS Oxidized/OXI."
     version = "0.1.0"
     base_url = "libreoxi"
-    min_version = "4.4.0"
-    max_version = "4.9.99"
+    min_version = "6.0.0"
+    max_version = "6.9.99"
     default_settings = {
         "storage_root": "/var/lib/netbox/libreoxi",
         "request_timeout": 10,
