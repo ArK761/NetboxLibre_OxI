@@ -238,9 +238,11 @@ def compare_config(request, pk):
         if tag == "insert": added += j2 - j1
         elif tag == "delete": removed += i2 - i1
         elif tag == "replace": removed += i2 - i1; added += j2 - j1; changed += 1
-    html_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=format_revision(old_name, settings), todesc=format_revision(new_name, settings), context=False, numlines=3)
+    fromdesc, todesc = format_revision(old_name, settings), format_revision(new_name, settings)
+    html_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, context=True, numlines=3)
+    full_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, context=False)
     changes = compare_changes(old_content, new_content)
-    return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff), "changes": changes, "change_counts": change_summary(changes)})
+    return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff), "full_diff_html": mark_safe(full_diff), "old_display": fromdesc, "new_display": todesc, "changes": changes, "change_counts": change_summary(changes)})
 
 
 def delete_revision(request, pk):
