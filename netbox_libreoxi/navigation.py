@@ -39,24 +39,13 @@ email_item = PluginMenuItem(
     link_text=menu_label("menu.email"),
 )
 
-self_settings_item = PluginMenuItem(
-    link="plugins:netbox_libreoxi:self_settings",
-    link_text=menu_label("menu.self_settings"),
-)
-
-self_audit_item = PluginMenuItem(
-    link="plugins:netbox_libreoxi:self_audit",
-    link_text=menu_label("menu.self_audit"),
-)
-
 
 menu = PluginMenu(
     label="LibreOXI",
     groups=(
         ("LibreOXI", (settings_item, logs_item, audit_item, email_item)),
-        ("NetBox Self", (self_settings_item, self_audit_item)),
     ),
     icon_class="mdi mdi-content-save-cog",
 )
 
-menu_items = (settings_item, logs_item, audit_item, email_item, self_settings_item, self_audit_item)
+menu_items = (settings_item, logs_item, audit_item, email_item)

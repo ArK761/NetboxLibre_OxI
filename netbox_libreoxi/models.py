@@ -49,45 +49,7 @@ class LibreOXISettings(models.Model):
     smtp_auth = models.BooleanField(default=False)
     language = models.CharField(max_length=8, default="en")
     audit_pdf_password = models.TextField(blank=True, default="")
-    self_audit_email = models.BooleanField(default=False)
-    self_audit_min_severity = models.CharField(max_length=16, default="low")
-    self_audit_snapshot = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return "LibreOXI settings"
-
-
-class SelfAuditRule(models.Model):
-    """NetBox Self audit: one watched field (or create/delete event) of one NetBox object type."""
-
-    object_type = models.CharField(max_length=100)  # "app_label.model", e.g. "dcim.device"
-    field = models.CharField(max_length=150)  # model field, "cf:<custom field>", "__create__" or "__delete__"
-    severity = models.CharField(max_length=16, default="medium")
-    message = models.TextField(blank=True, default="")
-    enabled = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ("object_type", "field")
-        constraints = [
-            models.UniqueConstraint(fields=("object_type", "field"), name="netbox_libreoxi_selfauditrule_unique"),
-        ]
-
-    def __str__(self):
-        return f"{self.object_type}.{self.field}"
-
-
-class SelfAuditSystemEvent(models.Model):
-    """NetBox version or installed plugin change detected by LibreOXI."""
-
-    time = models.DateTimeField()
-    kind = models.CharField(max_length=16)  # "netbox", "plugin_added", "plugin_removed", "plugin_version"
-    name = models.CharField(max_length=150, blank=True, default="")
-    old = models.CharField(max_length=100, blank=True, default="")
-    new = models.CharField(max_length=100, blank=True, default="")
-
-    class Meta:
-        ordering = ("-time",)
-
-    def __str__(self):
-        return f"{self.kind} {self.name} {self.old} -> {self.new}"

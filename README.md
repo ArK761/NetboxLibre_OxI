@@ -7,7 +7,7 @@ NetBox plugin for monitoring and storing network device configurations retrieved
 Install or upgrade the plugin with the standard pip command:
 
 ```bash
-pip install --upgrade --force-reinstall git+https://github.com/ArK761/NetboxLibre_OxI.git@1.0.2
+pip install --upgrade --force-reinstall git+https://github.com/ArK761/NetboxLibre_OxI.git@1.0.1
 ```
 
 Without `@<version>` pip installs the latest code from the `main` branch. To return to an older release use its tag,
@@ -168,28 +168,6 @@ what would be sent.
 - The LibreNMS API token, SMTP password and PDF password are stored in the NetBox database **as plain text**
   (not encrypted). Restrict access to the NetBox database and its backups accordingly.
 - A password-protected PDF uses 128-bit encryption; printing and copying text are allowed, editing is blocked.
-
-### NetBox Self audit (who changed what in NetBox)
-
-Besides device configurations, LibreOXI can audit changes made in NetBox itself.
-
-- **LibreOXI → NetBoxSelf Settings**: choose a NetBox object type (Device, Tenant, IP address, Prefix, IP range,
-  VLAN, VLAN group, Virtual machine, …). The plugin lists its fields, including custom fields. Tick the fields to
-  watch, set a severity for each and optionally the log message. *Object created* and *Object deleted* can be
-  watched too. Nothing is watched until you choose it.
-- Log message placeholders: `{user}`, `{object}`, `{object_type}`, `{field}`, `{old}`, `{new}`, `{added}`,
-  `{removed}`, `{changes}`, `{action}`. An empty message uses the default text in the selected language.
-- For lists (e.g. a multi-object custom field with 10 PCs, tags) and multi-line text, only the added and removed
-  items / lines are shown.
-- Changes of the NetBox version and of the installed plugins are always recorded (Critical), checked every minute
-  by the background worker.
-- **LibreOXI → NetBoxSelf Audit**: period, object types and minimum severity; table with time, severity, user,
-  object (link) and the change; links to the NetBox changelog entry. Download as PDF, CSV or HTML, or send by e-mail
-  with the existing e-mail settings (recipients chosen in a dialog, optional password-protected PDF).
-- Optionally the NetBox Self audit is also sent with the automatic audit e-mail, as a separate e-mail for the same
-  period (NetBoxSelf Settings → Options).
-- The data comes from the NetBox changelog, so the audit reaches back as far as NetBox keeps it
-  (`CHANGELOG_RETENTION`, 90 days by default).
 
 ### Monitoring, refresh and audit logs
 
