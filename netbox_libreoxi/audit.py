@@ -680,7 +680,8 @@ def _deliver(settings, message) -> None:
         if getattr(settings, "smtp_auth", False) and getattr(settings, "smtp_username", ""):
             server.login(settings.smtp_username, getattr(settings, "smtp_password", "") or "")
         envelope_from = parseaddr(message.from_email)[1] or message.from_email
-        server.sendmail(envelope_from, message.recipients(), message.message().as_bytes(linesep="\r\n"))
+        # send_message() accepts both the legacy and the modern (Django 6) message classes.
+        server.send_message(message.message(), from_addr=envelope_from, to_addrs=message.recipients())
     finally:
         try:
             server.quit()
