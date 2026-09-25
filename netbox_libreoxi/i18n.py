@@ -537,5 +537,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "ui.search_device": {"en": "Search device…", "sk": "Hľadať zariadenie…", "cs": "Hledat zařízení…", "de": "Gerät suchen…"},
     "ui.search": {"en": "Search", "sk": "Hľadať", "cs": "Hledat", "de": "Suchen"},
     "ui.no_match": {"en": "No device matches the search.", "sk": "Hľadaniu nezodpovedá žiadne zariadenie.", "cs": "Hledání neodpovídá žádné zařízení.", "de": "Kein Gerät entspricht der Suche."},
+    "obj.vlan_interface": {"en": "VLAN interface", "sk": "VLAN rozhranie", "cs": "VLAN rozhraní", "de": "VLAN-Schnittstelle"},
+    "chg.svi_added": {"en": "VLAN interface {vlan} was added{details}.", "sk": "VLAN rozhranie {vlan} bolo pridané{details}.", "cs": "VLAN rozhraní {vlan} bylo přidáno{details}.", "de": "VLAN-Schnittstelle {vlan} wurde hinzugefügt{details}."},
+    "chg.svi_removed": {"en": "VLAN interface {vlan} was removed{details}.", "sk": "VLAN rozhranie {vlan} bolo odstránené{details}.", "cs": "VLAN rozhraní {vlan} bylo odebráno{details}.", "de": "VLAN-Schnittstelle {vlan} wurde entfernt{details}."},
+    "chg.interface_added": {"en": "{obj} was added{details}.", "sk": "{obj} bolo pridané{details}.", "cs": "{obj} bylo přidáno{details}.", "de": "{obj} wurde hinzugefügt{details}."},
+    "chg.interface_removed": {"en": "{obj} was removed{details}.", "sk": "{obj} bolo odstránené{details}.", "cs": "{obj} bylo odebráno{details}.", "de": "{obj} wurde entfernt{details}."},
 }
 # fmt: on

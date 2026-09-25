@@ -63,6 +63,8 @@ NEGATIONS = ("no ", "undo ", "not ")
 # (regex over the key, label) used to name the attribute in change messages.
 ATTRIBUTE_LABELS = (
     (r"(^| )(description|comments?|descr)$", "description"),
+    (r"^if$", "interface"),
+    (r"^ipaddr$", "IP address"),
     (r"^type$", "action"),
     (r"(^| )alias$", "alias"),
     (r"(^| )members$", "VLAN members"),
@@ -394,6 +396,35 @@ def _vlan_name_line(line: str):
     return None
 
 
+MIKROTIK_FIND = re.compile(r"^set \[ *find (?:where )?(?P<cond>[^\]]*?) *\]")
+
+
+def _mikrotik_selector(line: str) -> str:
+    """"set [ find default-name=ether2 ] name=x" -> "default-name=ether2"."""
+    match = MIKROTIK_FIND.match(line)
+    return match.group("cond").strip() if match else ""
+
+
+def _mikrotik_values(line: str) -> dict[str, str]:
+    """key=value pairs of a MikroTik line without the [ find ... ] selector."""
+    return _key_values(MIKROTIK_FIND.sub("set", line, count=1))
+
+
+def _mikrotik_target(section: str, item: str, values: dict[str, str]):
+    """(category, object) for MikroTik entries that describe an interface/port."""
+    selector = dict(re.findall(r"([\w.-]+)=(\S+)", item or ""))
+    if section.startswith("/interface bridge port"):
+        name = selector.get("interface") or values.get("interface")
+        return ("Interface", f"Interface {_strip_quotes(name)}") if name else None
+    if section.startswith(("/interface ethernet", "/interface wireless", "/interface wifi", "/interface bonding")):
+        name = selector.get("default-name") or selector.get("name") or values.get("default-name")
+        return ("Interface", f"Interface {_strip_quotes(name)}") if name else None
+    if section.startswith("/interface vlan"):
+        name = selector.get("name") or values.get("name")
+        return ("VLAN", f"VLAN interface {_strip_quotes(name)}") if name else None
+    return None
+
+
 def line_key(line: str) -> str:
     """Return the attribute a line sets, so that old and new values pair up."""
     vlan_name = _vlan_name_line(line)
@@ -416,6 +447,9 @@ def line_key(line: str) -> str:
         if token in VALUE_KEYWORDS:
             return " ".join(tokens[: index + 1])
     if tokens[0] in ("add", "set") and any("=" in token for token in tokens):  # MikroTik
+        selector = _mikrotik_selector(body)
+        if selector:
+            return f"set {selector}"
         if tokens[0] == "set" and len(tokens) > 1 and "=" not in tokens[1]:
             return f"set {tokens[1]}"  # "set 3 disabled=yes", "set ether1 comment=x"
         for prefix in ("name=", "numbers=", "vlan-ids=", "address=", "interface="):
@@ -547,6 +581,15 @@ def _section_changes(path: list[str], old: list[Node], new: list[Node], out: lis
 
     category, obj = _describe_object(path)
 
+    # MikroTik "/path" sections that appear or disappear as a whole: report their entries.
+    for action, nodes in (("removed", removed), ("added", added)):
+        for node in [n for n in nodes if n.children and n.text.startswith("/") and not path]:
+            sub_category, sub_obj = _describe_object([node.text])
+            for child in node.children:
+                out.append(_single_line(action, sub_category, sub_obj, child.text, [node.text]))
+    removed = [n for n in removed if not (n.children and n.text.startswith("/") and not path)]
+    added = [n for n in added if not (n.children and n.text.startswith("/") and not path)]
+
     # Sections (headers with children) that appear or disappear as a whole.
     for node in [n for n in removed if n.children]:
         sub_category, sub_obj = _describe_object(path + [node.display or node.text])
@@ -618,8 +661,8 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
         verb = "disabled" if new_neg else "enabled"
         return Change("modified", category, obj, f"{obj}: {label} {verb}", old_line, new_line)
     if "=" in old_line and "=" in new_line:  # MikroTik "add name=x vlan-id=10"
-        old_kv = _key_values(old_line)
-        new_kv = _key_values(new_line)
+        old_kv = _mikrotik_values(old_line)
+        new_kv = _mikrotik_values(new_line)
         diffs = []
         for name in sorted(old_kv.keys() | new_kv.keys()):
             if old_kv.get(name) == new_kv.get(name):
@@ -636,8 +679,13 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
         # "set 3 disabled=yes" -> item "3"; "set show-at-login=yes" -> item is an attribute, not an entry
         target = obj if not item or f"{item.split()[0]}=" in old_line else f"{obj} [{item}]"
         vlan = new_kv.get("vlan-ids") or new_kv.get("vlan-id")
-        if vlan and old_kv.get("vlan-ids", old_kv.get("vlan-id")) == vlan:
+        if vlan and old_kv.get("vlan-ids", old_kv.get("vlan-id")) == vlan and not obj.startswith("/interface vlan"):
             category, target = "VLAN", f"VLAN {vlan}"
+        mikrotik = _mikrotik_target(obj, item, new_kv) if obj.startswith("/") else None
+        if mikrotik:
+            category, target = mikrotik
+            if any(name in ("pvid", "vlan-id", "vlan-ids") for name in old_kv.keys() | new_kv.keys() if old_kv.get(name) != new_kv.get(name)):
+                category = "VLAN" if category != "Interface" else "Interface"
         return Change("modified", category, target, f"{target}: {'; '.join(diffs)}", old_line, new_line)
     old_value, new_value = _value(old_line, key), _value(new_line, key)
     if label == "hostname":
@@ -684,6 +732,18 @@ def _single_line(action: str, category: str, obj: str, line: str, path: list[str
             return Change(action, kind, name, f"{name}: {action} \"{match.group(3)}\"", old, new)
 
     kv = _key_values(line, raw=True)
+    if path and path[0].startswith(("/ip address", "/ipv6 address")) and kv.get("address") and kv.get("interface"):
+        name = _strip_quotes(kv["interface"])
+        label = "IPv6 address" if path[0].startswith("/ipv6") else "IP address"
+        target = f"VLAN interface {name}" if name.lower().startswith("vlan") else f"Interface {name}"
+        return Change(action, "Routing", target, f'{target}: {label} {action} "{kv["address"]}"', old, new)
+    if path and path[0].startswith("/interface bridge port") and kv.get("interface") and line.startswith("add "):
+        name = _strip_quotes(kv["interface"])
+        details = [f"bridge {kv['bridge']}"] if kv.get("bridge") else []
+        if kv.get("pvid"):
+            details.append(f"native VLAN (PVID) {kv['pvid']}")
+        suffix = f" ({', '.join(details)})" if details else ""
+        return Change(action, "Interface", f"Interface {name}", f"Interface {name} {action}{suffix}", old, new)
     vlan = kv.get("vlan-ids") or kv.get("vlan-id")
     if vlan:  # MikroTik "/interface bridge vlan" or "/interface vlan" entry
         details = [
@@ -697,8 +757,13 @@ def _single_line(action: str, category: str, obj: str, line: str, path: list[str
     tokens = line.split()
     if kv and path and path[0].startswith("/") and tokens[0] == "set":
         # MikroTik "set 0 action=remote" / "set show-at-login=yes": describe the values that were set
-        item = f" [{tokens[1]}]" if len(tokens) > 1 and "=" not in tokens[1] else ""
-        values = _key_values(line)
+        selector = _mikrotik_selector(line)
+        item = f" [{selector or tokens[1]}]" if selector or (len(tokens) > 1 and "=" not in tokens[1]) else ""
+        values = _mikrotik_values(line)
+        mikrotik = _mikrotik_target(obj, selector, values)
+        if mikrotik:
+            category, obj = mikrotik
+            item = ""
         if action == "added":
             parts = [
                 f"{name} changed" if re.search(r"(password|secret|key|psk|passphrase|community)", name, re.IGNORECASE)

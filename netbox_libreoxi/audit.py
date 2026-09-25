@@ -81,11 +81,11 @@ _MANAGEMENT = re.compile(
 )
 _ROUTING = re.compile(
     r"(ip route|ipv6 route|default-gateway|default gateway|router\s|\bospf\b|\bbgp\b|\brip\b|"
-    r"/ip route|static-route|routing-options|protocols)",
+    r"/ip route|/ip address|/ipv6 address|static-route|routing-options|protocols)",
     re.IGNORECASE,
 )
 _DESCRIPTION = re.compile(
-    r"(: (description|name|alias|hostname|location|contact) (changed|added|removed)|^Hostname changed)",
+    r"(: (description|name|alias|hostname|location|contact|comment|descr) (changed|added|removed|set to)|^Hostname changed)",
     re.IGNORECASE,
 )
 
@@ -124,6 +124,11 @@ LABEL_ALIASES = {
     "syslocation": "SNMP location",
     "power inline priority": "PoE priority",
     "power inline": "PoE",
+    "pvid": "native VLAN (PVID)",
+    "comment": "description",
+    "descr": "description",
+    "vlan-id": "VLAN ID",
+    "if": "interface",
 }
 
 
@@ -150,7 +155,8 @@ def _object_name(obj: str, lang: str) -> str:
     """Parser object names -> names for the audit in the chosen language."""
     if obj in ("Global configuration", ""):
         return tr("obj.device", lang)
-    obj = re.sub(r" \(interface\)$", "", obj)
+    obj = re.sub(r"^VLAN (\S+) \(interface\)$", lambda m: f"{tr('obj.vlan_interface', lang)} {m.group(1)}", obj)
+    obj = re.sub(r"^VLAN interface ", lambda m: f"{tr('obj.vlan_interface', lang)} ", obj)
     # Firewall interfaces (pfSense wan/lan/optN) are "interfaces", switch interfaces are "ports".
     obj = re.sub(r"^Interface (?!(?:wan|lan|opt\d+)\b)", "Port ", obj)
     obj = re.sub(r"^Interface ((?:wan|lan|opt\d+)\b)", lambda m: f"{tr('obj.interface', lang)} {m.group(1)}", obj)
@@ -171,7 +177,7 @@ def _vlan_details(details: str, lang: str) -> tuple[str, str]:
     """MikroTik details "bridge bridge1, tagged a,b, comment "x"" -> readable sentence part."""
     items = dict(re.findall(r'(name|bridge|interface|tagged|untagged|comment)\s+("[^"]*"|[^\s,]+(?:,[^\s,]+)*)', details))
     parts = []
-    label = items.get("comment") or items.get("name")
+    label = items.get("comment") or (f'"{items["name"]}"' if items.get("name") else "")
     if items.get("bridge") or items.get("interface"):
         parts.append(tr("where.on", lang, name=items.get("bridge") or items.get("interface")))
     if items.get("tagged"):
@@ -234,15 +240,19 @@ def audit_text(change: dict, lang: str = "en") -> str:
         label, where = _vlan_details(match.group(3), lang)
         return tr(f"chg.vlan_{match.group(2)}", lang, vlan=match.group(1), label=label, details=_paren(where))
 
-    match = re.match(r"^VLAN (.+?)(?: \(interface\))? (added|removed)(?: \((.*)\))?$", message)
+    match = re.match(r"^VLAN (.+?)( \(interface\))? (added|removed)(?: \((.*)\))?$", message)
     if match:
-        details = _paren(_details(match.group(3), lang)) if match.group(3) else ""
-        return tr(f"chg.vlan_{match.group(2)}", lang, vlan=match.group(1), label="", details=details)
+        details = _paren(_details(match.group(4), lang)) if match.group(4) else ""
+        if match.group(2) and "IP address" in (match.group(4) or ""):
+            # routed VLAN interface (SVI)
+            return tr(f"chg.svi_{match.group(3)}", lang, vlan=match.group(1), details=details)
+        return tr(f"chg.vlan_{match.group(3)}", lang, vlan=match.group(1), label="", details=details)
 
     match = re.match(r"^Interface (.+?) (added|removed)(?: \((.*)\))?$", message)
     if match:
         details = _paren(_details(match.group(3), lang)) if match.group(3) else ""
-        return tr(f"chg.port_{match.group(2)}", lang, obj=_object_name("Interface " + match.group(1), lang), details=details)
+        kind = "interface" if re.match(r"(?:wan|lan|opt\d+)\b", match.group(1)) else "port"
+        return tr(f"chg.{kind}_{match.group(2)}", lang, obj=_object_name("Interface " + match.group(1), lang), details=details)
 
     match = re.match(r"^VLAN list changed .*\((.*)\)$", message)
     if match:
@@ -374,11 +384,11 @@ def classify(change: Change) -> str:
         return "routing"
     if _DESCRIPTION.search(change.message):
         return "description"
-    if change.category == "VLAN" or "VLAN" in change.message:
+    if change.category == "VLAN" or "VLAN" in change.message or re.search(r"\b(pvid|vlan-id|vlan-ids|vlan)\b", change.message):
         return "vlan"
     if "administratively" in change.message or "port security" in text.lower():
         return "port"
-    if change.category == "Interface" and re.match(r"^Interface \S+ (added|removed)", change.message):
+    if change.category == "Interface" and re.match(r"^Interface .+ (added|removed)", change.message):
         return "port"
     return "other"
 
