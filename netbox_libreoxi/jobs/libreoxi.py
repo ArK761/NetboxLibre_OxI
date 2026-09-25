@@ -118,19 +118,21 @@ class LibreOXIAuditMailJob(JobRunner):
         if due is None:
             return
         slot, since, until, label = due
+        # Log entries are always in English, whatever language is chosen for the audit.
+        period = f"{since.isoformat(timespec='minutes')}..{until.isoformat(timespec='minutes')}"
         # Mark the slot first so that a slow or failing SMTP server does not
         # cause the same audit to be sent again every minute.
         audit.write_last_sent(settings, slot)
         try:
             result = audit.send_audit(settings, list(monitored_devices(settings)), since, until, label)
         except Exception as exc:
-            append_log(settings.storage_root, f"ERROR audit e-mail failed period={label!r}: {exc}")
+            append_log(settings.storage_root, f"ERROR audit e-mail failed period={period}: {exc}")
             return
         if result["sent"]:
             append_log(
                 settings.storage_root,
-                f"INFO audit e-mail sent period={label!r} changes={result['total']} "
+                f"INFO audit e-mail sent period={period} changes={result['total']} "
                 f"to={','.join(audit.recipients(settings))}",
             )
         else:
-            append_log(settings.storage_root, f"INFO audit e-mail not sent period={label!r}: {result['reason']}")
+            append_log(settings.storage_root, f"INFO audit e-mail not sent period={period}: {result.get('reason_en', result['reason'])}")

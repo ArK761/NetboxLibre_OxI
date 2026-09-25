@@ -206,27 +206,28 @@ class DeviceLibreOXIView(generic.ObjectView):
                     selected_config = current
                 device_logs = read_device_logs(settings.storage_root, device, settings)
             except OSError as exc:
-                storage_error = f"LibreOXI storage is not accessible: {exc}"
+                storage_error = f"LibreOXI storage: {exc}"
         return render(request, "netbox_libreoxi/device_tab.html", {
             "object": device, "device": device, "tab": self.tab, "settings": settings,
             "monitored": monitored, "current": current, "current_hash": current_hash,
             "selected_config": selected_config, "selected_name": selected_name, "history": history,
             "last_check": last_check, "storage_error": storage_error, "device_logs": device_logs,
+            "lang": language_of(settings),
         })
 
     def post(self, request, pk):
         device = get_object_or_404(Device, pk=pk)
         settings = LibreOXISettings.objects.first()
         if not settings:
-            messages.error(request, "LibreOXI settings have not been configured.")
+            messages.error(request, tr("msg.not_configured", language_of(settings)))
         elif not monitored_devices(settings).filter(pk=device.pk).exists():
-            messages.warning(request, "This device is not selected for LibreOXI monitoring.")
+            messages.warning(request, tr("msg.not_monitored", language_of(settings)))
         else:
             result = fetch_device(settings, device)
             if result["ok"]:
-                messages.warning(request, "Configuration changed and a new revision was stored.") if result["changed"] else messages.success(request, "No configuration change detected.")
+                messages.warning(request, tr("msg.changed", language_of(settings))) if result["changed"] else messages.success(request, tr("msg.no_change", language_of(settings)))
             else:
-                messages.error(request, f"Configuration was not changed: {result['error']}")
+                messages.error(request, tr("msg.not_changed_error", language_of(settings), error=result['error']))
         return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
 
 
@@ -257,6 +258,9 @@ def compare_config(request, pk):
     fromdesc, todesc = format_revision(old_name, settings), format_revision(new_name, settings)
     html_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, context=True, numlines=3)
     full_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, context=False)
+    lang = language_of(settings)
+    html_diff = html_diff.replace("No Differences Found", tr("cmp.no_diff", lang)).replace("Empty File", tr("cmp.empty_file", lang))
+    full_diff = full_diff.replace("No Differences Found", tr("cmp.no_diff", lang)).replace("Empty File", tr("cmp.empty_file", lang))
     changes = compare_changes(old_content, new_content)
     ip = str(device.primary_ip4.address.ip) if device.primary_ip4 else ""
     audit_report = audit.build_preview(
@@ -273,12 +277,12 @@ def delete_revision(request, pk):
     if not settings or not monitored_devices(settings).filter(pk=device.pk).exists(): return HttpResponse("Device is not selected for LibreOXI monitoring.", status=404, content_type="text/plain")
     revision = request.POST.get("revision", "").strip()
     if revision in ("", "current.cfg"):
-        messages.error(request, "The current configuration cannot be deleted."); return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
+        messages.error(request, tr("msg.current_not_deletable", language_of(settings))); return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
     path = _history_path(settings, device, revision)
     if path is None:
-        messages.error(request, "Configuration revision not found."); return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
-    try: path.unlink(); messages.success(request, f"Configuration revision {revision} was deleted.")
-    except OSError as exc: messages.error(request, f"Configuration revision could not be deleted: {exc}")
+        messages.error(request, tr("msg.revision_not_found", language_of(settings))); return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
+    try: path.unlink(); messages.success(request, tr("msg.revision_deleted", language_of(settings), revision=revision))
+    except OSError as exc: messages.error(request, tr("msg.revision_delete_failed", language_of(settings), error=exc))
     return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
 
 
@@ -301,7 +305,7 @@ def download_config(request, pk):
 def logs_view(request):
     settings = LibreOXISettings.objects.first()
     if not settings:
-        return render(request, "netbox_libreoxi/logs.html", {"settings": None, "devices": [], "selected_device": None, "logs": [], "scheduled_runs": []})
+        return render(request, "netbox_libreoxi/logs.html", {"settings": None, "devices": [], "selected_device": None, "logs": [], "scheduled_runs": [], "lang": "en"})
     devices = list(monitored_devices(settings)); selected_id = request.GET.get("device", "").strip(); selected_device = None; logs = []
     if selected_id.isdigit():
         selected_device = next((device for device in devices if device.pk == int(selected_id)), None)
@@ -309,7 +313,7 @@ def logs_view(request):
     for device in devices:
         device_logs = read_device_logs(settings.storage_root, device, settings, limit=1); device.latest_log = device_logs[0] if device_logs else None
     scheduled_runs = read_scheduler_logs(settings.storage_root, settings)
-    return render(request, "netbox_libreoxi/logs.html", {"settings": settings, "devices": devices, "selected_device": selected_device, "logs": logs, "scheduled_runs": scheduled_runs})
+    return render(request, "netbox_libreoxi/logs.html", {"settings": settings, "devices": devices, "selected_device": selected_device, "logs": logs, "scheduled_runs": scheduled_runs, "lang": language_of(settings)})
 
 
 def settings_view(request):
@@ -318,7 +322,7 @@ def settings_view(request):
     if request.method == "POST":
         form = LibreOXISettingsForm(request.POST, instance=instance)
         if form.is_valid():
-            form.save(); messages.success(request, "LibreOXI settings saved. New storage path is used immediately by device views and refresh jobs.")
+            saved = form.save(); messages.success(request, tr("set.saved", language_of(saved)))
             return redirect("plugins:netbox_libreoxi:settings")
     else: form = LibreOXISettingsForm(instance=instance)
     return render(request, "netbox_libreoxi/settings.html", {"form": form, "lang": language_of(instance)})
@@ -368,7 +372,7 @@ def audit_view(request):
         return redirect(f"{reverse('login')}?next={request.path}")
     settings = LibreOXISettings.objects.first()
     if not settings:
-        return render(request, "netbox_libreoxi/audit.html", {"settings": None})
+        return render(request, "netbox_libreoxi/audit.html", {"settings": None, "lang": "en"})
 
     devices = list(monitored_devices(settings))
     selected_ids = [int(value) for value in request.GET.getlist("device") if value.isdigit()]

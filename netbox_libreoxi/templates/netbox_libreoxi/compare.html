@@ -4,15 +4,15 @@
 {% block content %}
   <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-      <strong>LibreOXI configuration comparison</strong>
-      <a class="btn btn-danger btn-sm" href="{% url 'dcim:device_libreoxi' device.pk %}">&times; Close comparison</a>
+      <strong>{{ "cmp.title"|tr:lang }}</strong>
+      <a class="btn btn-danger btn-sm" href="{% url 'dcim:device_libreoxi' device.pk %}">&times; {{ "cmp.close"|tr:lang }}</a>
     </div>
     <div class="card-body">
       <div class="row g-3 mb-3">
         <div class="col-md-4">
           <div class="card h-100">
             <div class="card-body">
-              <div class="text-muted">Added lines</div>
+              <div class="text-muted">{{ "cmp.added_lines"|tr:lang }}</div>
               <strong class="text-success">+{{ added }}</strong>
             </div>
           </div>
@@ -20,7 +20,7 @@
         <div class="col-md-4">
           <div class="card h-100">
             <div class="card-body">
-              <div class="text-muted">Removed lines</div>
+              <div class="text-muted">{{ "cmp.removed_lines"|tr:lang }}</div>
               <strong class="text-danger">-{{ removed }}</strong>
             </div>
           </div>
@@ -28,7 +28,7 @@
         <div class="col-md-4">
           <div class="card h-100">
             <div class="card-body">
-              <div class="text-muted">Changed blocks</div>
+              <div class="text-muted">{{ "cmp.changed_blocks"|tr:lang }}</div>
               <strong>{{ changed }}</strong>
             </div>
           </div>
@@ -36,31 +36,31 @@
       </div>
 
       <div class="mb-3">
-        <strong>Older:</strong> <code>{{ old_display }}</code>
+        <strong>{{ "cmp.older"|tr:lang }}:</strong> <code>{{ old_display }}</code>
         <span class="mx-2">→</span>
-        <strong>Newer:</strong> <code>{{ new_display }}</code>
+        <strong>{{ "cmp.newer"|tr:lang }}:</strong> <code>{{ new_display }}</code>
       </div>
 
       <div class="card mb-3">
         <div class="card-header">
-          <strong>Detected changes</strong>
-          <span class="badge text-bg-success ms-2">{{ change_counts.added }} added</span>
-          <span class="badge text-bg-danger ms-1">{{ change_counts.removed }} removed</span>
-          <span class="badge text-bg-warning ms-1">{{ change_counts.modified }} modified</span>
+          <strong>{{ "cmp.detected"|tr:lang }}</strong>
+          <span class="badge text-bg-success ms-2">{% trf "cmp.n_added" lang count=change_counts.added %}</span>
+          <span class="badge text-bg-danger ms-1">{% trf "cmp.n_removed" lang count=change_counts.removed %}</span>
+          <span class="badge text-bg-warning ms-1">{% trf "cmp.n_modified" lang count=change_counts.modified %}</span>
         </div>
         {% if changes %}
           <div class="table-responsive">
             <table class="table table-sm table-hover mb-0 libreoxi-changes">
               <thead>
-                <tr><th>Action</th><th>Severity</th><th>Category</th><th>Change</th><th>Older line</th><th>Newer line</th></tr>
+                <tr><th>{{ "cmp.action"|tr:lang }}</th><th>{{ "field.severity"|tr:lang }}</th><th>{{ "field.category"|tr:lang }}</th><th>{{ "field.change"|tr:lang }}</th><th>{{ "field.old"|tr:lang }}</th><th>{{ "field.new"|tr:lang }}</th></tr>
               </thead>
               <tbody>
                 {% for change in changes %}
                   <tr>
                     <td>
-                      {% if change.action == "added" %}<span class="badge text-bg-success">Added</span>
-                      {% elif change.action == "removed" %}<span class="badge text-bg-danger">Removed</span>
-                      {% else %}<span class="badge text-bg-warning">Modified</span>{% endif %}
+                      {% if change.action == "added" %}<span class="badge text-bg-success">{{ "cmp.act_added"|tr:lang }}</span>
+                      {% elif change.action == "removed" %}<span class="badge text-bg-danger">{{ "cmp.act_removed"|tr:lang }}</span>
+                      {% else %}<span class="badge text-bg-warning">{{ "cmp.act_modified"|tr:lang }}</span>{% endif %}
                     </td>
                     <td>
                       {% if change.severity == "critical" %}<span class="badge text-bg-danger">{{ change.severity_label }}</span>
@@ -69,7 +69,7 @@
                       {% else %}<span class="badge text-bg-secondary">{{ change.severity_label }}</span>{% endif %}
                     </td>
                     <td>{{ change.category_label }}</td>
-                    <td>{{ change.message }}</td>
+                    <td>{{ change.text }}</td>
                     <td><code>{{ change.old }}</code></td>
                     <td><code>{{ change.new }}</code></td>
                   </tr>
@@ -78,7 +78,7 @@
             </table>
           </div>
         {% else %}
-          <div class="card-body text-muted">No configuration changes detected (only ordering or comments differ).</div>
+          <div class="card-body text-muted">{{ "cmp.no_changes"|tr:lang }}</div>
         {% endif %}
       </div>
 
@@ -102,20 +102,20 @@
         </div>
       </div>
 
-      <h6 class="mb-2">Changed lines (with 3 lines of context)</h6>
+      <h6 class="mb-2">{{ "cmp.changed_lines"|tr:lang }}</h6>
       <div class="table-responsive libreoxi-diff mb-3">
         {{ diff_html }}
       </div>
 
       <details class="mb-3">
-        <summary class="btn btn-outline-secondary btn-sm">Show full configuration comparison</summary>
+        <summary class="btn btn-outline-secondary btn-sm">{{ "cmp.show_full"|tr:lang }}</summary>
         <div class="table-responsive libreoxi-diff mt-2">
           {{ full_diff_html }}
         </div>
       </details>
 
       <div class="text-end">
-        <a class="btn btn-danger btn-sm" href="{% url 'dcim:device_libreoxi' device.pk %}">&times; Close comparison</a>
+        <a class="btn btn-danger btn-sm" href="{% url 'dcim:device_libreoxi' device.pk %}">&times; {{ "cmp.close"|tr:lang }}</a>
       </div>
     </div>
   </div>

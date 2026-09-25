@@ -370,6 +370,7 @@ def annotate(settings, changes: list[Change]) -> list[dict]:
                 "new": mask_secrets(change.new),
             }
         )
+        rows[-1]["text"] = audit_text(rows[-1], lang)
     return rows
 
 
@@ -724,10 +725,10 @@ def send_audit(
     lang = language_of(settings)
     to = to or recipients(settings)
     if not to:
-        return {"sent": False, "total": 0, "reason": tr("mail.no_recipients", lang)}
+        return {"sent": False, "total": 0, "reason": tr("mail.no_recipients", lang), "reason_en": tr("mail.no_recipients", "en")}
     report = build_audit(settings, devices, since, until, label)
     if not report["total"] and not force and not getattr(settings, "audit_send_empty", False):
-        return {"sent": False, "total": 0, "reason": tr("mail.no_changes", lang)}
+        return {"sent": False, "total": 0, "reason": tr("mail.no_changes", lang), "reason_en": tr("mail.no_changes", "en")}
 
     if attachments is None:
         attachments = [

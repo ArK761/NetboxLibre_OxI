@@ -120,6 +120,29 @@ class LibreOXISettingsForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         lang = language_of(self.instance)
+        for name, (label, help_text) in {
+            "librenms_url": ("set.librenms_url", None),
+            "oxidized_path": ("set.oxidized_path", None),
+            "api_token": ("set.api_token", None),
+            "storage_root": ("set.storage_root", None),
+            "request_timeout": ("set.request_timeout", None),
+            "schedule_preset": ("set.cron_preset", "set.cron_preset_help"),
+            "schedule_cron": ("set.schedule_cron", "set.schedule_cron_help"),
+            "retention_days": ("set.retention_days", None),
+            "retention_revisions": ("set.retention_revisions", None),
+            "verify_tls": ("set.verify_tls", None),
+            "enabled": ("set.enabled", None),
+            "device_roles": ("set.device_roles", "set.device_roles_help"),
+            "devices": ("set.devices", "set.devices_help"),
+            "datetime_format": ("set.datetime_format", "set.datetime_format_help"),
+        }.items():
+            if name in self.fields:
+                self.fields[name].label = tr(label, lang)
+                if help_text:
+                    self.fields[name].help_text = tr(help_text, lang)
+        self.fields["schedule_preset"].choices = (("", tr("set.cron_preset_select", lang)),) + tuple(
+            (value, tr(f"preset.{value}", lang)) for value, _label in SCHEDULE_PRESETS
+        )
         self.fields["language"].label = tr("form.language", lang) + (" / Language" if lang != "en" else "")
         self.fields["language"].help_text = tr("form.language_help", lang)
         self.fields["audit_min_severity"].label = tr("form.min_severity", lang)

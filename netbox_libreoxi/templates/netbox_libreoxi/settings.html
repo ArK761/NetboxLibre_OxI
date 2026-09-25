@@ -1,7 +1,7 @@
 {% extends 'base/layout.html' %}
 {% load libreoxi_tags %}
 
-{% block title %}LibreOXI Settings{% endblock %}
+{% block title %}{{ "set.title"|tr:lang }}{% endblock %}
 
 {% block content %}
 {{ form.media }}
@@ -9,7 +9,7 @@
   <div class="col-12 col-xl-8">
     <div class="card">
       <div class="card-header">
-        <h5 class="card-title mb-0">LibreOXI Settings</h5>
+        <h5 class="card-title mb-0">{{ "set.title"|tr:lang }}</h5>
       </div>
       <div class="card-body">
         <form method="post">
@@ -42,7 +42,7 @@
             </div>
           {% endfor %}
 
-          <button type="submit" class="btn btn-primary">Apply</button>
+          <button type="submit" class="btn btn-primary">{{ "set.apply"|tr:lang }}</button>
         </form>
       </div>
     </div>
