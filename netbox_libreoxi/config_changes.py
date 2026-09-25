@@ -67,7 +67,9 @@ ATTRIBUTE_LABELS = (
     (r"(trunk allowed vlan|allow-pass vlan|vlan trunk allowed|vlan members)", "allowed VLANs"),
     (r"(native vlan|native-vlan-id|pvid vlan|vlan trunk native)", "native VLAN"),
     (r"(switchport mode|port link-type|port-mode|interface-mode)", "port mode"),
-    (r"^vlan pvid$", "native VLAN (PVID)"),
+    (r"general allowed vlan untagged$", "untagged VLANs"),
+    (r"general allowed vlan tagged$", "tagged VLANs"),
+    (r"(^| )pvid$", "native VLAN (PVID)"),
     (r"^vlan tagging$", "tagged VLANs"),
     (r"^vlan participation include$", "member VLANs"),
     (r"^vlan participation exclude$", "excluded VLANs"),
@@ -235,6 +237,52 @@ VLAN_NAME_LINE = (
 )
 
 
+# "switchport general allowed vlan add 1411 untagged" (Aruba Instant On 1930 and
+# similar general-mode switches): the attribute is the tagged/untagged list.
+GENERAL_ALLOWED_VLAN = re.compile(r"^switchport\s+general\s+allowed\s+vlan\s+(?:add\s+)?(?P<vlans>\S+)\s+(?P<mode>tagged|untagged)$")
+VLAN_LIST = re.compile(r"^\[?\s*\d+(?:-\d+)?(?:\s*[,\s]\s*\d+(?:-\d+)?)*\s*\]?$")
+
+
+def _expand_vlans(value: str) -> set[int] | None:
+    value = value.strip().strip("[]").strip()
+    if not value or not VLAN_LIST.match(value):
+        return None
+    vlans: set[int] = set()
+    for part in re.split(r"[,\s]+", value):
+        if not part:
+            continue
+        if "-" in part:
+            start, end = (int(bound) for bound in part.split("-", 1))
+            if end < start or end - start > 4094:
+                return None
+            vlans.update(range(start, end + 1))
+        else:
+            vlans.add(int(part))
+    return vlans
+
+
+def _compact_vlans(vlans: set[int]) -> str:
+    ranges = []
+    for vlan in sorted(vlans):
+        if ranges and vlan == ranges[-1][1] + 1:
+            ranges[-1][1] = vlan
+        else:
+            ranges.append([vlan, vlan])
+    return ",".join(str(a) if a == b else f"{a}-{b}" for a, b in ranges)
+
+
+def _vlan_delta(old_value: str, new_value: str) -> str:
+    old_vlans, new_vlans = _expand_vlans(old_value), _expand_vlans(new_value)
+    if old_vlans is None or new_vlans is None or (len(old_vlans) <= 1 and len(new_vlans) <= 1):
+        return ""
+    parts = []
+    if new_vlans - old_vlans:
+        parts.append(f"added {_compact_vlans(new_vlans - old_vlans)}")
+    if old_vlans - new_vlans:
+        parts.append(f"removed {_compact_vlans(old_vlans - new_vlans)}")
+    return f" ({'; '.join(parts)})" if parts else ""
+
+
 def _vlan_name_line(line: str):
     for pattern in VLAN_NAME_LINE:
         match = pattern.match(line)
@@ -248,6 +296,9 @@ def line_key(line: str) -> str:
     vlan_name = _vlan_name_line(line)
     if vlan_name:
         return f"vlan {vlan_name[0]} name"
+    general = GENERAL_ALLOWED_VLAN.match(line)
+    if general:
+        return f"switchport general allowed vlan {general.group('mode')}"
     _, body = _split_negation(line)
     tokens = body.split()
     if not tokens:
@@ -275,6 +326,9 @@ def line_key(line: str) -> str:
 
 
 def _value(line: str, key: str) -> str:
+    general = GENERAL_ALLOWED_VLAN.match(line)
+    if general:
+        return general.group("vlans")
     _, body = _split_negation(line)
     if body.startswith(key):
         return _strip_quotes(body[len(key):]) or body
@@ -417,7 +471,8 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
     old_list = re.match(r"^vlan\s+(\d[\d,\-]*)$", old_line)
     new_list = re.match(r"^vlan\s+(\d[\d,\-]*)$", new_line)
     if old_list and new_list and obj == "vlan database":
-        return Change("modified", "VLAN", "VLAN list", f'VLAN list changed "{old_list.group(1)}" -> "{new_list.group(1)}"', old_line, new_line)
+        delta = _vlan_delta(old_list.group(1), new_list.group(1))
+        return Change("modified", "VLAN", "VLAN list", f'VLAN list changed "{old_list.group(1)}" -> "{new_list.group(1)}"{delta}', old_line, new_line)
 
     label = _attribute_label(key)
     old_neg, _ = _split_negation(old_line)
@@ -441,7 +496,8 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
     old_value, new_value = _value(old_line, key), _value(new_line, key)
     if label == "hostname":
         return Change("modified", "System", "Hostname", f'Hostname changed "{old_value}" -> "{new_value}"', old_line, new_line)
-    return Change("modified", category, obj, f'{obj}: {label} changed "{old_value}" -> "{new_value}"', old_line, new_line)
+    delta = _vlan_delta(old_value, new_value) if "vlan" in key.lower() or "VLAN" in label else ""
+    return Change("modified", category, obj, f'{obj}: {label} changed "{old_value}" -> "{new_value}"{delta}', old_line, new_line)
 
 
 def _single_line(action: str, category: str, obj: str, line: str, path: list[str]) -> Change:
