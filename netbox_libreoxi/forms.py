@@ -7,6 +7,7 @@ from django import forms
 from dcim.models import Device, DeviceRole
 from utilities.forms.fields import DynamicModelMultipleChoiceField
 
+from .audit import AUDIT_CATEGORIES, AUDIT_FIELDS, DEFAULT_AUDIT_FIELDS, SEVERITIES, severity_map
 from .models import LibreOXISettings
 from .scheduler import validate_cron_schedule
 
@@ -70,6 +71,19 @@ class LibreOXISettingsForm(forms.ModelForm):
         help_text="Selecting a preset fills the cron field; the cron field is the value that is saved.",
     )
 
+    audit_min_severity = forms.ChoiceField(
+        label="Audit: minimum severity to report",
+        choices=SEVERITIES,
+        help_text="Only changes with this severity or higher are included in the audit for the security manager.",
+    )
+    audit_fields = forms.MultipleChoiceField(
+        label="Audit: fields in the report",
+        choices=AUDIT_FIELDS,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="The device name and the change are always included.",
+    )
+
     class Meta:
         model = LibreOXISettings
         fields = (
@@ -87,10 +101,20 @@ class LibreOXISettingsForm(forms.ModelForm):
             "device_roles",
             "devices",
             "datetime_format",
+            "audit_min_severity",
+            "audit_fields",
         )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        severities = severity_map(self.instance)
+        for key, label, _default in AUDIT_CATEGORIES:
+            self.fields[f"audit_severity_{key}"] = forms.ChoiceField(
+                label=f"Audit severity: {label}",
+                choices=SEVERITIES,
+                initial=severities[key],
+            )
+        self.fields["audit_fields"].initial = self.instance.audit_fields or DEFAULT_AUDIT_FIELDS
         self.fields["api_token"].initial = self.instance.api_token_encrypted
         self.fields["schedule_preset"].initial = ""
         if self.instance.pk:
@@ -154,6 +178,13 @@ class LibreOXISettingsForm(forms.ModelForm):
             instance.api_token_encrypted = token
         instance.device_role_ids = [obj.pk for obj in self.cleaned_data.get("device_roles", [])]
         instance.device_ids = [obj.pk for obj in self.cleaned_data.get("devices", [])]
+        instance.audit_severity_map = {
+            key: self.cleaned_data[f"audit_severity_{key}"] for key, _label, _default in AUDIT_CATEGORIES
+        }
+        fields = list(self.cleaned_data.get("audit_fields") or [])
+        if "change" not in fields:
+            fields.append("change")
+        instance.audit_fields = [key for key, _label in AUDIT_FIELDS if key in fields]
         if commit:
             instance.save()
         return instance

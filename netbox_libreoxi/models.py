@@ -26,6 +26,13 @@ class LibreOXISettings(models.Model):
         max_length=64,
         default="%d.%m.%Y %H:%M:%S",
     )
+    audit_email_enabled = models.BooleanField(default=False)
+    audit_email_recipients = models.TextField(blank=True, default="")
+    audit_email_time = models.CharField(max_length=5, default="07:00")
+    audit_min_severity = models.CharField(max_length=16, default="medium")
+    audit_severity_map = models.JSONField(default=dict, blank=True)
+    audit_fields = models.JSONField(default=list, blank=True)
+    audit_send_empty = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

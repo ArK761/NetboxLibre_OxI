@@ -30,6 +30,8 @@ IGNORED_PREFIXES = (
 # Line prefixes whose value may contain several words. The key of such a line
 # is the prefix itself, so "description A" and "description B" pair up.
 KEY_PREFIXES = (
+    ("snmp-server", "community"),
+    ("snmp-agent", "community"),
     ("snmp-server", "location"),
     ("snmp-server", "contact"),
     ("snmp-agent", "sys-info", "location"),
@@ -299,6 +301,9 @@ def line_key(line: str) -> str:
     general = GENERAL_ALLOWED_VLAN.match(line)
     if general:
         return f"switchport general allowed vlan {general.group('mode')}"
+    user = re.match(r"^(?:no\s+)?(username|local-user|user)\s+(\S+)", line)
+    if user:
+        return f"{user.group(1)} {user.group(2)}"
     _, body = _split_negation(line)
     tokens = body.split()
     if not tokens:
@@ -468,6 +473,10 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
         vlan = new_vlan_name[0]
         return Change("modified", "VLAN", f"VLAN {vlan}", f'VLAN {vlan}: name changed "{old_vlan_name[1]}" -> "{new_vlan_name[1]}"', old_line, new_line)
 
+    if re.match(r"^(username|local-user|user) \S+$", key):
+        name = key.split(" ", 1)[1]
+        return Change("modified", "System", f"User {name}", f"User {name} changed (password, privilege or other settings)", old_line, new_line)
+
     old_list = re.match(r"^vlan\s+(\d[\d,\-]*)$", old_line)
     new_list = re.match(r"^vlan\s+(\d[\d,\-]*)$", new_line)
     if old_list and new_list and obj == "vlan database":
@@ -484,7 +493,9 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
         old_kv = _key_values(old_line)
         new_kv = _key_values(new_line)
         diffs = [
-            f'{name} changed "{old_kv.get(name, "")}" -> "{new_kv.get(name, "")}"'
+            f"{name} changed"
+            if re.search(r"(password|secret|key|psk|passphrase|community)", name, re.IGNORECASE)
+            else f'{name} changed "{old_kv.get(name, "")}" -> "{new_kv.get(name, "")}"'
             for name in sorted(old_kv.keys() | new_kv.keys())
             if old_kv.get(name) != new_kv.get(name)
         ]
@@ -516,6 +527,10 @@ def _single_line(action: str, category: str, obj: str, line: str, path: list[str
         match = re.match(r"^vlan\s+(\d[\d,\-]*)$", line)
         if match:
             return Change(action, "VLAN", f"VLAN {match.group(1)}", f"VLAN list {match.group(1)} {action}", old, new)
+
+    user = re.match(r"^(?:username|local-user)\s+(\S+)", line)
+    if user:
+        return Change(action, "System", f"User {user.group(1)}", f"User {user.group(1)} {action}", old, new)
 
     if not path:
         match = re.match(r"^vlan batch\s+(.+)$", line)

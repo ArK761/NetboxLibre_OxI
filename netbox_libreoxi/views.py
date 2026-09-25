@@ -13,6 +13,7 @@ from dcim.models import Device
 from netbox.views import generic
 from utilities.views import ViewTab, register_model_view
 
+from . import audit
 from .config_changes import compare as compare_changes, summary as change_summary
 from .forms import LibreOXISettingsForm
 from .models import LibreOXISettings
@@ -148,6 +149,20 @@ def _history_path(settings, device, revision):
     return directory / revision if revision in history else None
 
 
+def _revision_time(settings, device, revision):
+    """UTC time of a stored revision (history files are named by their UTC timestamp)."""
+    if revision == "current.cfg":
+        path = device_dir(settings.storage_root, device.pk, create=False) / "current.cfg"
+        try:
+            return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        except OSError:
+            return datetime.now(timezone.utc)
+    try:
+        return datetime.strptime(revision.removesuffix(".cfg"), "%Y-%m-%d_%H-%M-%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return datetime.now(timezone.utc)
+
+
 def _load_revision(settings, device, revision):
     if revision == "current.cfg":
         return read_current(settings.storage_root, device.pk)
@@ -242,7 +257,12 @@ def compare_config(request, pk):
     html_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, context=True, numlines=3)
     full_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, context=False)
     changes = compare_changes(old_content, new_content)
-    return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff), "full_diff_html": mark_safe(full_diff), "old_display": fromdesc, "new_display": todesc, "changes": changes, "change_counts": change_summary(changes)})
+    ip = str(device.primary_ip4.address.ip) if device.primary_ip4 else ""
+    audit_report = audit.build_preview(
+        settings, device, ip, changes, _revision_time(settings, device, old_name), _revision_time(settings, device, new_name)
+    )
+    audit_subject, _audit_text, audit_html = audit.render_report(settings, audit_report)
+    return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff), "full_diff_html": mark_safe(full_diff), "old_display": fromdesc, "new_display": todesc, "changes": audit.annotate(settings, changes), "change_counts": change_summary(changes), "audit_report": audit_report, "audit_subject": audit_subject, "audit_html": mark_safe(audit_html), "audit_min_severity": audit.SEVERITY_LABEL.get(settings.audit_min_severity, settings.audit_min_severity)})
 
 
 def delete_revision(request, pk):

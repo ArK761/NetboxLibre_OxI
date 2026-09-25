@@ -51,7 +51,7 @@
           <div class="table-responsive">
             <table class="table table-sm table-hover mb-0 libreoxi-changes">
               <thead>
-                <tr><th>Action</th><th>Category</th><th>Change</th><th>Older line</th><th>Newer line</th></tr>
+                <tr><th>Action</th><th>Severity</th><th>Category</th><th>Change</th><th>Older line</th><th>Newer line</th></tr>
               </thead>
               <tbody>
                 {% for change in changes %}
@@ -61,7 +61,13 @@
                       {% elif change.action == "removed" %}<span class="badge text-bg-danger">Removed</span>
                       {% else %}<span class="badge text-bg-warning">Modified</span>{% endif %}
                     </td>
-                    <td>{{ change.category }}</td>
+                    <td>
+                      {% if change.severity == "critical" %}<span class="badge text-bg-danger">Critical</span>
+                      {% elif change.severity == "high" %}<span class="badge text-bg-warning">High</span>
+                      {% elif change.severity == "medium" %}<span class="badge text-bg-info">Medium</span>
+                      {% else %}<span class="badge text-bg-secondary">Low</span>{% endif %}
+                    </td>
+                    <td>{{ change.category_label }}</td>
                     <td>{{ change.message }}</td>
                     <td><code>{{ change.old }}</code></td>
                     <td><code>{{ change.new }}</code></td>
@@ -73,6 +79,26 @@
         {% else %}
           <div class="card-body text-muted">No configuration changes detected (only ordering or comments differ).</div>
         {% endif %}
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <strong>Audit preview &mdash; what will be sent to the security manager</strong>
+            <div class="small text-muted">
+              Minimum severity: {{ audit_min_severity }}.
+              {% if audit_report.skipped %}{{ audit_report.skipped }} change(s) below the minimum severity are not included.{% endif %}
+              Severities and fields are configured in LibreOXI Settings.
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#libreoxi-audit-preview">Show / hide</button>
+        </div>
+        <div class="collapse show" id="libreoxi-audit-preview">
+          <div class="card-body">
+            <div class="mb-2"><strong>Subject:</strong> <code>{{ audit_subject }}</code></div>
+            <div class="libreoxi-audit-mail">{{ audit_html }}</div>
+          </div>
+        </div>
       </div>
 
       <h6 class="mb-2">Changed lines (with 3 lines of context)</h6>
@@ -94,6 +120,7 @@
   </div>
 
   <style>
+    .libreoxi-audit-mail { background: #fff; color: #212529; border-radius: .375rem; padding: 1rem; overflow-x: auto; }
     .libreoxi-diff table.diff { width: 100%; font-family: var(--bs-font-monospace); font-size: .875rem; }
     .libreoxi-diff .diff_header { background: var(--bs-tertiary-bg); }
     .libreoxi-diff td, .libreoxi-diff th { padding: .25rem .5rem; vertical-align: top; }

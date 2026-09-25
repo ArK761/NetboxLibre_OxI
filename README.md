@@ -89,6 +89,25 @@ indentation-based configurations (Cisco IOS/NX-OS, Arista, Huawei, HP/Aruba, For
 configurations (Juniper Junos, VyOS), `set`-style configurations (Junos/VyOS display set) and MikroTik exports.
 Changes that only reorder lines or change comments/timestamps are ignored.
 
+#### Audit for the security manager
+
+Every detected change is assigned an audit category and a severity:
+
+| Category | Default severity |
+|---|---|
+| Firewall / ACL | Critical |
+| Users and access (users, passwords, AAA) | Critical |
+| Device management (SNMP, SSH/HTTP, logging, NTP, management VLAN) | High |
+| Routing (static routes, OSPF, BGP, gateway) | High |
+| VLANs (added/removed VLANs, port VLANs) | Medium |
+| Ports (shutdown/no shutdown, port security) | Medium |
+| Descriptions and names | Low |
+| Other changes | Low |
+
+Severities, the minimum severity reported to the security manager and the fields included in the
+report are configured in LibreOXI Settings. The compare page shows an **Audit preview** of exactly
+what would be sent. Passwords, secrets, SNMP communities and keys are masked (`*****`) in the audit.
+
 ### Monitoring, refresh and audit logs
 
 - Automatic checks run asynchronously according to the configured check interval.
