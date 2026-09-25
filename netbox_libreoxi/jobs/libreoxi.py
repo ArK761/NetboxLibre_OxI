@@ -109,10 +109,18 @@ class LibreOXIAuditMailJob(JobRunner):
         name = "LibreOXI audit e-mail"
 
     def run(self, *args, **kwargs):
-        from .. import audit
+        from .. import audit, self_audit
 
         settings = LibreOXISettings.objects.first()
-        if not settings or not settings.audit_email_enabled or not audit.recipients(settings):
+        if not settings:
+            return
+        try:
+            recorded = self_audit.check_system(settings)
+            if recorded:
+                append_log(settings.storage_root, f"INFO NetBox version / plugin change recorded events={recorded}")
+        except Exception as exc:
+            append_log(settings.storage_root, f"ERROR NetBox version / plugin check failed: {exc}")
+        if not settings.audit_email_enabled or not audit.recipients(settings):
             return
         due = audit.scheduled_period(settings, timezone.now())
         if due is None:
@@ -127,12 +135,23 @@ class LibreOXIAuditMailJob(JobRunner):
             result = audit.send_audit(settings, list(monitored_devices(settings)), since, until, label)
         except Exception as exc:
             append_log(settings.storage_root, f"ERROR audit e-mail failed period={period}: {exc}")
+        else:
+            if result["sent"]:
+                append_log(
+                    settings.storage_root,
+                    f"INFO audit e-mail sent period={period} changes={result['total']} "
+                    f"to={','.join(audit.recipients(settings))}",
+                )
+            else:
+                append_log(settings.storage_root, f"INFO audit e-mail not sent period={period}: {result.get('reason_en', result['reason'])}")
+        if not getattr(settings, "self_audit_email", False):
+            return
+        try:
+            result = self_audit.send_report(settings, since, until, label)
+        except Exception as exc:
+            append_log(settings.storage_root, f"ERROR NetBox Self audit e-mail failed period={period}: {exc}")
             return
         if result["sent"]:
-            append_log(
-                settings.storage_root,
-                f"INFO audit e-mail sent period={period} changes={result['total']} "
-                f"to={','.join(audit.recipients(settings))}",
-            )
+            append_log(settings.storage_root, f"INFO NetBox Self audit e-mail sent period={period} changes={result['total']}")
         else:
-            append_log(settings.storage_root, f"INFO audit e-mail not sent period={period}: {result.get('reason_en', result['reason'])}")
+            append_log(settings.storage_root, f"INFO NetBox Self audit e-mail not sent period={period}: {result.get('reason_en', result['reason'])}")

@@ -1,0 +1,194 @@
+{% extends 'base/layout.html' %}
+{% load libreoxi_tags %}
+
+{% block title %}{{ "self.title"|tr:lang }}{% endblock %}
+
+{% block content %}
+{% if not settings %}
+  <div class="alert alert-warning">{{ "ui.not_configured"|tr:"en" }}</div>
+{% else %}
+<div class="card mb-3">
+  <div class="card-header">
+    <strong>{{ "self.title"|tr:lang }}</strong>
+    <div class="small text-muted">{% trf "self.audit_help" lang severity=min_severity_label %}</div>
+    {% if not has_rules %}<div class="alert alert-info mt-2 mb-0">{{ "self.no_rules"|tr:lang }} <a href="{% url 'plugins:netbox_libreoxi:self_settings' %}">{{ "menu.self_settings"|tr:lang }}</a></div>{% endif %}
+  </div>
+  <div class="card-body">
+    <form method="get" id="libreoxi-self-audit-form">
+      <div class="row g-3 align-items-end">
+        <div class="col-12 col-md-3">
+          <label class="form-label" for="libreoxi-period">{{ "ui.period"|tr:lang }}</label>
+          <select class="form-select" name="period" id="libreoxi-period">
+            <option value="today" {% if period == "today" %}selected{% endif %}>{{ "ui.today"|tr:lang }}</option>
+            <option value="yesterday" {% if period == "yesterday" %}selected{% endif %}>{{ "ui.yesterday"|tr:lang }}</option>
+            <option value="last7" {% if period == "last7" %}selected{% endif %}>{{ "ui.last7"|tr:lang }}</option>
+            <option value="day" {% if period == "day" %}selected{% endif %}>{{ "ui.day"|tr:lang }}</option>
+            <option value="range" {% if period == "range" %}selected{% endif %}>{{ "ui.range"|tr:lang }}</option>
+            <option value="all" {% if period == "all" %}selected{% endif %}>{{ "ui.all"|tr:lang }}</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-2 libreoxi-period-day">
+          <label class="form-label" for="libreoxi-day">{{ "ui.day_label"|tr:lang }}</label>
+          <input class="form-control" type="date" name="day" id="libreoxi-day" value="{{ day }}">
+        </div>
+        <div class="col-6 col-md-2 libreoxi-period-range">
+          <label class="form-label" for="libreoxi-from">{{ "ui.from"|tr:lang }}</label>
+          <input class="form-control" type="date" name="from" id="libreoxi-from" value="{{ date_from }}">
+        </div>
+        <div class="col-6 col-md-2 libreoxi-period-range">
+          <label class="form-label" for="libreoxi-to">{{ "ui.to"|tr:lang }}</label>
+          <input class="form-control" type="date" name="to" id="libreoxi-to" value="{{ date_to }}">
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label" for="libreoxi-types">{{ "self.types"|tr:lang }} <span class="text-muted small">{{ "self.types_hint"|tr:lang }}</span></label>
+          <select class="form-select" name="type" id="libreoxi-types" multiple size="4">
+            {% for key, label in type_choices %}
+              <option value="{{ key }}" {% if key in selected_types %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-2">
+          <label class="form-label" for="libreoxi-severity">{{ "self.min_severity"|tr:lang }}</label>
+          <select class="form-select" name="severity" id="libreoxi-severity">
+            {% for key, label in severities %}
+              <option value="{{ key }}" {% if key == min_severity %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="mt-3 d-flex flex-wrap gap-2">
+        <button type="submit" name="generate" value="1" class="btn btn-primary">{{ "ui.generate"|tr:lang }}</button>
+        <button type="submit" name="export" value="pdf" class="btn btn-outline-secondary">{{ "ui.download_pdf"|tr:lang }}</button>
+        <button type="submit" name="export" value="csv" class="btn btn-outline-secondary">{{ "ui.download_csv"|tr:lang }}</button>
+        <button type="submit" name="export" value="html" class="btn btn-outline-secondary">{{ "ui.download_html"|tr:lang }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if generated %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <strong>{{ period_label }}</strong>
+      <span class="text-muted small ms-2">
+        {% if report.total %}{% trf "ui.changes_count" lang total=report.total %}{% else %}{{ "ui.no_changes"|tr:lang }}{% endif %}
+        {% if report.skipped %} · {% trf "ui.skipped" lang count=report.skipped %}{% endif %}
+      </span>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=pdf">{{ "ui.download_pdf"|tr:lang }}</a>
+      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=csv">{{ "ui.download_csv"|tr:lang }}</a>
+      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=html">{{ "ui.download_html"|tr:lang }}</a>
+      <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#libreoxi-send-modal"
+              {% if not recipients %}disabled title="{{ "ui.set_recipients"|tr:lang }}"{% endif %}>{{ "ui.send_email"|tr:lang }}</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="mb-2"><strong>{{ "ui.subject"|tr:lang }}:</strong> <code>{{ subject }}</code></div>
+    {% if report.entries %}
+    <div class="table-responsive">
+      <table class="table table-sm align-top">
+        <thead>
+          <tr>
+            <th>{{ "field.time"|tr:lang }}</th>
+            <th>{{ "field.severity"|tr:lang }}</th>
+            <th>{{ "self.col_user"|tr:lang }}</th>
+            <th>{{ "self.col_object"|tr:lang }}</th>
+            <th>{{ "field.change"|tr:lang }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in report.entries %}
+          <tr>
+            <td class="text-nowrap">{{ entry.when_display }}</td>
+            <td><span class="badge libreoxi-sev-{{ entry.severity }}">{{ entry.severity_label }}</span></td>
+            <td>{{ entry.user|default:"-" }}</td>
+            <td>
+              <span class="text-muted small">{{ entry.object_type }}</span><br>
+              {% if entry.object_url %}<a href="{{ entry.object_url }}">{{ entry.object }}</a>{% else %}{{ entry.object }}{% endif %}
+            </td>
+            <td>
+              {{ entry.text }}
+              {% if entry.kind == "list" or entry.kind == "lines" %}
+                {% for item in entry.added %}<div class="font-monospace small text-success">+ {{ item }}</div>{% endfor %}
+                {% for item in entry.removed %}<div class="font-monospace small text-danger">&minus; {{ item }}</div>{% endfor %}
+              {% endif %}
+              {% if entry.changelog_url %}<div class="small"><a href="{{ entry.changelog_url }}">{{ "self.changelog"|tr:lang }}</a></div>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="text-muted mb-0">{{ "self.no_changes"|tr:lang }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="modal fade" id="libreoxi-send-modal" tabindex="-1" aria-labelledby="libreoxi-send-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="?{{ query }}" class="modal-content">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="send_email">
+      <div class="modal-header">
+        <h5 class="modal-title" id="libreoxi-send-title">{{ "ui.send_title"|tr:lang }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ "ui.cancel"|tr:lang }}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3"><strong>{{ period_label }}</strong></p>
+        {% include "netbox_libreoxi/inc/recipients_pick.html" with prefix="libreoxi-send" %}
+        <hr>
+        <div class="form-text mb-2">{{ "ui.body_hint"|tr:lang }}</div>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" name="attach_pdf" id="libreoxi-attach-pdf" {% if default_attach_pdf %}checked{% endif %}>
+          <label class="form-check-label" for="libreoxi-attach-pdf">{{ "ui.attach_pdf"|tr:lang }}</label>
+        </div>
+        <div class="form-check form-switch mt-2 libreoxi-pdf-only">
+          <input class="form-check-input" type="checkbox" role="switch" name="pdf_protect" id="libreoxi-pdf-protect" {% if pdf_password_set %}checked{% endif %}>
+          <label class="form-check-label" for="libreoxi-pdf-protect">{{ "form.pdf_protect"|tr:lang }}</label>
+        </div>
+        <div class="mt-2 libreoxi-pdf-only libreoxi-pdf-pass">
+          <label class="form-label" for="libreoxi-pdf-password">{{ "ui.pdf_password"|tr:lang }}</label>
+          <input class="form-control" type="password" name="pdf_password" id="libreoxi-pdf-password" autocomplete="new-password">
+          <div class="form-text">{{ "ui.pdf_password_help"|tr:lang }}{% if pdf_password_set %} {{ "ui.pdf_password_saved"|tr:lang }}{% endif %}</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ "ui.cancel"|tr:lang }}</button>
+        <button type="submit" class="btn btn-primary">{{ "ui.send"|tr:lang }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<style>
+  .libreoxi-sev-low { background: #6c757d; color: #fff; }
+  .libreoxi-sev-medium { background: #d39e00; color: #fff; }
+  .libreoxi-sev-high { background: #fd7e14; color: #fff; }
+  .libreoxi-sev-critical { background: #dc3545; color: #fff; }
+</style>
+<script>
+  (() => {
+    const period = document.getElementById('libreoxi-period');
+    const update = () => {
+      document.querySelectorAll('.libreoxi-period-day').forEach((el) => { el.style.display = period.value === 'day' ? '' : 'none'; });
+      document.querySelectorAll('.libreoxi-period-range').forEach((el) => { el.style.display = period.value === 'range' ? '' : 'none'; });
+    };
+    period.addEventListener('change', update);
+    update();
+    const attach = document.getElementById('libreoxi-attach-pdf');
+    const protect = document.getElementById('libreoxi-pdf-protect');
+    const updatePdf = () => {
+      document.querySelectorAll('.libreoxi-pdf-only').forEach((el) => { el.style.display = attach && attach.checked ? '' : 'none'; });
+      document.querySelectorAll('.libreoxi-pdf-pass').forEach((el) => { el.style.display = attach && attach.checked && protect && protect.checked ? '' : 'none'; });
+    };
+    attach?.addEventListener('change', updatePdf);
+    protect?.addEventListener('change', updatePdf);
+    updatePdf();
+  })();
+</script>
+{% endif %}
+{% endblock %}

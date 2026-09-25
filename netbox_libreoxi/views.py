@@ -15,11 +15,11 @@ from dcim.models import Device
 from netbox.views import generic
 from utilities.views import ViewTab, register_model_view
 
-from . import audit
+from . import audit, self_audit
 from .config_changes import compare as compare_changes, config_author, summary as change_summary
 from .forms import LibreOXIEmailForm, LibreOXISettingsForm
 from .i18n import language_of, tr
-from .models import LibreOXISettings
+from .models import LibreOXISettings, SelfAuditRule
 from .oxi import fetch_device, monitored_devices
 from .storage import device_dir, list_history, read_current
 
@@ -613,3 +613,178 @@ def email_view(request):
         },
     )
 
+
+
+# --------------------------------------------------------------------------
+# NetBox Self audit
+# --------------------------------------------------------------------------
+
+def self_settings_view(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('login')}?next={request.path}")
+    settings = LibreOXISettings.objects.first()
+    if settings is None:
+        messages.warning(request, tr("ui.save_settings_first", "en"))
+        return redirect("plugins:netbox_libreoxi:settings")
+    lang = language_of(settings)
+    here = reverse("plugins:netbox_libreoxi:self_settings")
+
+    if request.method == "POST" and request.POST.get("action") == "options":
+        severity = request.POST.get("self_audit_min_severity", "low")
+        settings.self_audit_min_severity = severity if severity in audit.SEVERITY_RANK else "low"
+        settings.self_audit_email = request.POST.get("self_audit_email") == "on"
+        settings.save(update_fields=["self_audit_min_severity", "self_audit_email"])
+        messages.success(request, tr("self.options_saved", lang))
+        return redirect(f"{here}?type={quote(request.POST.get('type', ''))}")
+
+    if request.method == "POST" and request.POST.get("action") == "rules":
+        key = request.POST.get("type", "")
+        if self_audit.model_for(key) is None:
+            messages.error(request, tr("self.unknown_type", lang))
+            return redirect(here)
+        existing = {rule.field: rule for rule in SelfAuditRule.objects.filter(object_type=key)}
+        keys = list(self_audit.EVENTS) + [name for name, _label, _kind in self_audit.discover_fields(key)]
+        watched = 0
+        for field in keys:
+            rule = existing.get(field)
+            if request.POST.get(f"watch__{field}") != "on":
+                if rule is not None:
+                    rule.delete()
+                continue
+            severity = request.POST.get(f"sev__{field}", "medium")
+            values = {
+                "severity": severity if severity in audit.SEVERITY_RANK else "medium",
+                "message": (request.POST.get(f"msg__{field}") or "").strip(),
+                "enabled": True,
+            }
+            SelfAuditRule.objects.update_or_create(object_type=key, field=field, defaults=values)
+            watched += 1
+        messages.success(request, tr("self.rules_saved", lang, type=self_audit.type_label(key), count=watched))
+        return redirect(f"{here}?type={quote(key)}")
+
+    selected = request.GET.get("type", "")
+    rows = []
+    if selected and self_audit.model_for(selected) is not None:
+        rules = {rule.field: rule for rule in SelfAuditRule.objects.filter(object_type=selected)}
+        sections = [("self.events", [(field, self_audit.field_label(selected, field, lang), "event") for field in self_audit.EVENTS])]
+        fields = self_audit.discover_fields(selected)
+        sections.append(("self.fields", [item for item in fields if item[2] == "field"]))
+        sections.append(("self.custom_fields", [item for item in fields if item[2] == "custom"]))
+        for title, items in sections:
+            if not items:
+                continue
+            rows.append({"section": tr(title, lang)})
+            for field, label, kind in items:
+                rule = rules.get(field)
+                rows.append({
+                    "field": field,
+                    "label": label,
+                    "kind": kind,
+                    "watched": rule is not None,
+                    "severity": rule.severity if rule else ("high" if kind == "event" else "medium"),
+                    "message": rule.message if rule else "",
+                    "default": tr(self_audit.default_message(field), lang),
+                })
+    elif selected:
+        selected = ""
+
+    counts = {}
+    for rule in SelfAuditRule.objects.all():
+        counts[rule.object_type] = counts.get(rule.object_type, 0) + 1
+    watched_types = sorted(((key, self_audit.type_label(key), count) for key, count in counts.items()), key=lambda item: item[1].lower())
+    return render(request, "netbox_libreoxi/self_settings.html", {
+        "settings": settings,
+        "lang": lang,
+        "groups": self_audit.watchable_types(),
+        "selected": selected,
+        "selected_label": self_audit.type_label(selected) if selected else "",
+        "rows": rows,
+        "watched_types": watched_types,
+        "severities": audit.severities(lang),
+        "placeholders": ", ".join("{" + name + "}" for name in self_audit.PLACEHOLDERS),
+    })
+
+
+def self_audit_view(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('login')}?next={request.path}")
+    settings = LibreOXISettings.objects.first()
+    if not settings:
+        return render(request, "netbox_libreoxi/self_audit.html", {"settings": None, "lang": "en"})
+    lang = language_of(settings)
+    since, until, label = _audit_period(request, settings)
+    types = [key for key in request.GET.getlist("type") if key]
+    min_severity = request.GET.get("severity") or settings.self_audit_min_severity
+    if min_severity not in audit.SEVERITY_RANK:
+        min_severity = "low"
+
+    if request.method == "POST" and request.POST.get("action") == "send_email":
+        attach_pdf = request.POST.get("attach_pdf") == "on"
+        protect = request.POST.get("pdf_protect") == "on"
+        password = (request.POST.get("pdf_password") or settings.audit_pdf_password) if protect else ""
+        if attach_pdf and protect and not password:
+            messages.error(request, tr("form.err_pdf_password", lang))
+            return redirect(f"{request.path}?{request.GET.urlencode()}")
+        to = _chosen_recipients(request, settings, lang)
+        if to is None:
+            return redirect(f"{request.path}?{request.GET.urlencode()}")
+        try:
+            result = self_audit.send_report(
+                settings, since, until, label, to=to, force=True, attach_pdf=attach_pdf, pdf_password=password,
+                types=types or None, min_severity=min_severity,
+            )
+            if result["sent"]:
+                messages.success(request, tr("self.sent", lang, period=label, recipients=", ".join(to)))
+            else:
+                messages.warning(request, result["reason"])
+        except Exception as exc:
+            messages.error(request, tr("ui.audit_send_failed", lang, error=exc))
+        return redirect(f"{request.path}?{request.GET.urlencode()}")
+
+    watched = sorted({rule.object_type for rule in SelfAuditRule.objects.filter(enabled=True)})
+    context = {
+        "settings": settings,
+        "lang": lang,
+        "period": request.GET.get("period", "today"),
+        "day": request.GET.get("day", ""),
+        "date_from": request.GET.get("from", ""),
+        "date_to": request.GET.get("to", ""),
+        "period_label": label,
+        "type_choices": [(key, self_audit.type_label(key)) for key in watched] + [("netbox.system", tr("self.system_type", lang))],
+        "selected_types": types,
+        "severities": audit.severities(lang),
+        "min_severity": min_severity,
+        "min_severity_label": audit.severity_label(min_severity, lang),
+        "has_rules": bool(watched),
+        "generated": "generate" in request.GET or "export" in request.GET,
+        "recipients": ", ".join(audit.recipients(settings)),
+        "recipient_list": audit.recipients(settings),
+        "pdf_password_set": bool(settings.audit_pdf_password),
+        "default_attach_pdf": settings.audit_email_attach_pdf,
+    }
+    if not context["generated"]:
+        return render(request, "netbox_libreoxi/self_audit.html", context)
+
+    report = self_audit.build_report(settings, since, until, label, types or None, min_severity)
+    subject, _text, html = self_audit.render_report(settings, report)
+    for entry in report["entries"]:
+        entry["when_display"] = format_timestamp(entry["when"].isoformat(), settings)
+    export = request.GET.get("export")
+    stamp = django_timezone.localtime().strftime("%Y-%m-%d_%H-%M")
+    if export == "csv":
+        response = HttpResponse(self_audit.report_csv(settings, report), content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="netbox-self-audit_{stamp}.csv"'
+        return response
+    if export == "pdf":
+        from .audit_pdf import build_self_pdf
+
+        response = HttpResponse(build_self_pdf(settings, report, subject), content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="netbox-self-audit_{stamp}.pdf"'
+        return response
+    if export == "html":
+        response = HttpResponse(self_audit.html_document(settings, report), content_type="text/html; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="netbox-self-audit_{stamp}.html"'
+        return response
+
+    context.update({"report": report, "subject": subject, "query": request.GET.urlencode()})
+    return render(request, "netbox_libreoxi/self_audit.html", context)
