@@ -42,7 +42,7 @@ AUDIT_FIELDS = (
     ("old", "Older line"),
     ("new", "Newer line"),
 )
-DEFAULT_AUDIT_FIELDS = ["time", "ip", "severity", "category", "change", "old", "new"]
+DEFAULT_AUDIT_FIELDS = ["time", "ip", "severity", "category", "change"]
 
 AUDIT_FILE = "audit.jsonl"
 LAST_SENT_FILE = ".audit_last_sent"
@@ -91,6 +91,125 @@ def mask_secrets(text: str) -> str:
     """Hide passwords, secrets, SNMP communities and keys from audit output."""
     text = _SECRET_CHANGE.sub(lambda match: match.group("key"), text or "")
     return _SECRET.sub(lambda match: f"{match.group('key')}*****", text)
+
+
+def _object_name(obj: str) -> str:
+    """"Interface 2" -> "Port 2", "VLAN 10 (interface)" -> "VLAN 10"."""
+    obj = re.sub(r"^Interface ", "Port ", obj)
+    return re.sub(r" \(interface\)$", "", obj)
+
+
+def _list(value: str) -> str:
+    return ", ".join(part for part in re.split(r"\s*,\s*", value.strip()) if part)
+
+
+def _vlan_details(details: str) -> str:
+    """MikroTik details "bridge bridge1, tagged a,b, comment "x"" -> readable sentence part."""
+    items = dict(re.findall(r'(name|bridge|interface|tagged|untagged|comment)\s+("[^"]*"|[^\s,]+(?:,[^\s,]+)*)', details))
+    parts = []
+    label = items.get("comment") or items.get("name")
+    if items.get("bridge"):
+        parts.append(f"on {items['bridge']}")
+    elif items.get("interface"):
+        parts.append(f"on {items['interface']}")
+    if items.get("tagged"):
+        parts.append(f"tagged on ports {_list(items['tagged'])}")
+    if items.get("untagged"):
+        parts.append(f"untagged on ports {_list(items['untagged'])}")
+    return (f" {label}" if label else ""), ", ".join(parts)
+
+
+def audit_text(change: dict) -> str:
+    """Plain-language description of a change for the security manager (no config lines)."""
+    message = change.get("message", "")
+    obj = _object_name(change.get("object", ""))
+
+    match = re.match(r"^VLAN (\S+) (added|removed) \((.*)\)$", message)
+    if match and re.search(r"\b(bridge|tagged|untagged|interface) ", match.group(3)):
+        label, where = _vlan_details(match.group(3))
+        return f"VLAN {match.group(1)}{label} was {match.group(2)}" + (f" ({where})." if where else ".")
+
+    match = re.match(r"^(?:Interface|VLAN) (.+?)(?: \(interface\))? (added|removed)(?: \((.*)\))?$", message)
+    if match:
+        kind = "VLAN" if message.startswith("VLAN") else "Port"
+        details = f" ({match.group(3)})" if match.group(3) else ""
+        return f"{kind} {match.group(1)} was {match.group(2)}{details}."
+
+    match = re.match(r"^VLAN list changed .*\((.*)\)$", message)
+    if match:
+        sentences = []
+        for action, vlans in re.findall(r"(added|removed) ([\d,\-]+)", match.group(1)):
+            sentences.append(f"VLAN {vlans} {'added to' if action == 'added' else 'removed from'} the VLAN database")
+        return "; ".join(sentences) + "."
+
+    match = re.match(r'^VLAN (\S+): (tagged|untagged) changed "(.*)" -> "(.*)"$', message)
+    if match:
+        old_ports = {port for port in match.group(3).split(",") if port}
+        new_ports = {port for port in match.group(4).split(",") if port}
+        sentences = []
+        if new_ports - old_ports:
+            sentences.append(f"ports {', '.join(sorted(new_ports - old_ports))} added to VLAN {match.group(1)} ({match.group(2)})")
+        if old_ports - new_ports:
+            sentences.append(f"ports {', '.join(sorted(old_ports - new_ports))} removed from VLAN {match.group(1)} ({match.group(2)})")
+        if sentences:
+            text = "; ".join(sentences)
+            return text[0].upper() + text[1:] + "."
+
+    match = re.match(r"^/user name=(\S+): (.+) changed$", message)
+    if match:
+        return f"User account {match.group(1)}: {match.group(2)} was changed."
+
+    match = re.match(r"^(.+?): (snmp-server community|snmp-agent community) changed$", message)
+    if match:
+        return "SNMP community was changed."
+
+    match = re.match(r'^(/ip firewall \S+|/ipv6 firewall \S+): line (added|removed) "(?:add )?(.*)"$', message)
+    if match:
+        return f"Firewall rule {match.group(2)} ({match.group(1)}): {match.group(3)}"
+
+    match = re.match(r"^(.+?): (tagged|untagged|allowed|member) VLANs changed .*\((.*)\)$", message)
+    if match:
+        port, mode, delta = _object_name(match.group(1)), match.group(2), match.group(3)
+        sentences = []
+        for action, vlans in re.findall(r"(added|removed) ([\d,\-]+)", delta):
+            verb = "added to" if action == "added" else "removed from"
+            sentences.append(f"VLAN {vlans} {verb} {port} ({mode})")
+        return "; ".join(sentences) + "."
+
+    match = re.match(r'^(.+?): (.+?) changed "(.*)" -> "(.*)"(.*)$', message)
+    if match:
+        target = "Device" if match.group(1) == "Global configuration" else _object_name(match.group(1))
+        return f'{target}: {match.group(2)} changed from "{match.group(3)}" to "{match.group(4)}".'
+
+    match = re.match(r"^(.+?): administratively (enabled|disabled)", message)
+    if match:
+        state = "enabled" if match.group(2) == "enabled" else "shut down"
+        return f"{_object_name(match.group(1))} was {state}."
+
+    match = re.match(r'^Hostname changed "(.*)" -> "(.*)"$', message)
+    if match:
+        return f'Device renamed from "{match.group(1)}" to "{match.group(2)}".'
+
+    match = re.match(r"^User (\S+) (added|removed|changed.*)$", message)
+    if match:
+        action = {"added": "was created", "removed": "was deleted"}.get(match.group(2), "was modified (password, privilege or other settings)")
+        return f"User account {match.group(1)} {action}."
+
+    match = re.match(r'^(.+?): line (added|removed) "(.*)"$', message)
+    if match:
+        where = "global configuration" if match.group(1) == "Global configuration" else _object_name(match.group(1))
+        return f'Configuration {match.group(2)} in {where}: {match.group(3)}'
+
+    match = re.match(r'^(.+?): (.+?) (added|removed) "(.*)"$', message)
+    if match:
+        return f'{_object_name(match.group(1))}: {match.group(2)} "{match.group(4)}" {match.group(3)}.'
+
+    match = re.match(r"^(.+?): (.+) changed$", message)
+    if match:
+        target = "Device" if match.group(1) == "Global configuration" else _object_name(match.group(1))
+        return f"{target}: {match.group(2)} was changed."
+
+    return message
 
 
 def classify(change: Change) -> str:
@@ -304,7 +423,7 @@ def render_report(settings, report: dict) -> tuple[str, str, str]:
         if field == "category":
             return change["category_label"]
         if field == "change":
-            return change["message"]
+            return audit_text(change)
         return change.get(field, "")
 
     text = [f"LibreOXI configuration change audit", f"Period: {period}", ""]

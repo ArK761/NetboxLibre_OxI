@@ -317,7 +317,7 @@ def line_key(line: str) -> str:
     if tokens[0] == "set" and len(tokens) > 2:  # Fortinet "set attr value..."
         return " ".join(tokens[:2])
     if tokens[0] in ("add", "set") and any("=" in token for token in tokens):  # MikroTik
-        for prefix in ("name=", "numbers=", "address=", "interface="):
+        for prefix in ("name=", "numbers=", "vlan-ids=", "address=", "interface="):
             names = [token for token in tokens if token.startswith(prefix)]
             if names:
                 return f"{tokens[0]} {names[0]}"
