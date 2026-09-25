@@ -86,8 +86,62 @@ Above the line-by-line diff, the comparison page lists the changes in human-read
 
 The configuration is parsed into sections without any external dependency, so it works across vendors:
 indentation-based configurations (Cisco IOS/NX-OS, Arista, Huawei, HP/Aruba, Fortinet), brace-based
-configurations (Juniper Junos, VyOS), `set`-style configurations (Junos/VyOS display set) and MikroTik exports.
+configurations (Juniper Junos, VyOS), `set`-style configurations (Junos/VyOS display set), MikroTik exports and
+pfSense/OPNsense `config.xml` (firewall rules, NAT, aliases, users, interfaces, VLANs, SNMP, web GUI). For pfSense the
+audit also shows who saved the configuration (from `<revision>`).
 Changes that only reorder lines or change comments/timestamps are ignored.
+
+#### Audit for the security manager
+
+Every detected change is assigned an audit category and a severity:
+
+| Category | Default severity |
+|---|---|
+| Firewall / ACL / VPN (rules, NAT, aliases, VPN) | Critical |
+| Users and access (users, passwords, AAA) | Critical |
+| Device management (SNMP, SSH/HTTP, logging, NTP, management VLAN) | High |
+| Routing (static routes, OSPF, BGP, gateway, interface IP addresses) | High |
+| VLANs (added/removed VLANs, port VLANs) | Medium |
+| Ports (shutdown/no shutdown, port security) | Medium |
+| Descriptions and names | Low |
+| Other changes | Low |
+
+The **LibreOXI → Audit** page generates the audit for all monitored devices at once (or selected devices)
+for today, yesterday, the last 7 days, a specific day, a date range or the complete stored history. It is built
+from the stored configuration history by comparing consecutive revisions, so it also covers changes made before
+the audit feature was installed (within the configured retention). The report can be downloaded as CSV (Excel)
+or HTML.
+
+The audit can also be downloaded as **PDF** and sent by e-mail from the Audit page (**Odoslať e-mailom**).
+
+**Automatic audit e-mail** (separate page **LibreOXI → E-mail**):
+
+- recipients: one or more addresses (a group address works too);
+- frequency: daily (previous day), weekly (last 7 days, on a chosen weekday) or monthly (previous month, on the 1st);
+- send time, optional e-mail when there were no changes, optional PDF attachment, optionally protected with a password
+  (the audit is always in the e-mail body);
+- Email Options like in LibreNMS: from name, from address, SMTP server, port, timeout, encryption
+  (Disabled / SSL / TLS-STARTTLS), Auto TLS and optional SMTP authentication. The plugin talks to the SMTP server
+  directly, independently of NetBox's own e-mail configuration. When the SMTP server is empty, NetBox's `EMAIL`
+  settings from `configuration.py` are used;
+- **Poslať testovací e-mail** sends a test e-mail using the saved settings.
+
+The e-mail is sent by the NetBox background worker (`netbox-rq`); results are written to the LibreOXI log.
+PDF generation uses `reportlab` (installed automatically) and the bundled DejaVu Sans font (see `fonts/LICENSE-DejaVu.txt`).
+
+**Language:** LibreOXI Settings → *Language* selects English (default), Slovak, Czech or German for the audit
+(e-mail, PDF, CSV, preview) and for the Audit and E-mail pages.
+
+When sending an audit from the Audit page, a dialog asks for the recipients (ticked from the configured list and/or
+other addresses), whether to attach the PDF and whether to protect it with a password. The test e-mail on the E-mail page
+also asks for the recipients.
+
+The audit describes changes in plain language, e.g.
+`VLAN 201 "## TEST ##" was added (on bridge1, tagged on ports sfp-sfpplus2, sfp-sfpplus1).`
+
+Severities, the minimum severity reported to the security manager and the fields included in the
+report are configured in LibreOXI Settings. The compare page shows an **Audit preview** of exactly
+what would be sent. Passwords, secrets, SNMP communities and keys are masked (`*****`) in the audit.
 
 ### Monitoring, refresh and audit logs
 

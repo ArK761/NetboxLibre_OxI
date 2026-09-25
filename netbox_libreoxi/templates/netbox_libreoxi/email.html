@@ -1,0 +1,96 @@
+{% extends 'base/layout.html' %}
+{% load libreoxi_tags %}
+
+{% block title %}{{ "ui.email_options"|tr:lang }}{% endblock %}
+
+{% block content %}
+{% load libreoxi_tags %}
+<div class="row">
+  <div class="col-12 col-xl-8">
+    <form method="post" id="libreoxi-email-form">
+      {% csrf_token %}
+
+      <div class="card mb-3">
+        <div class="card-header"><h5 class="card-title mb-0">{{ "ui.email_options"|tr:lang }}</h5></div>
+        <div class="card-body">
+          {% for field in form %}
+            {% if field.name|slice:":5" == "smtp_" %}
+              {% include "netbox_libreoxi/inc/email_field.html" %}
+            {% endif %}
+          {% endfor %}
+          {% if password_set %}
+            <div class="form-text libreoxi-auth">{{ "ui.password_saved"|tr:lang }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header"><h5 class="card-title mb-0">{{ "ui.audit_sending"|tr:lang }}</h5></div>
+        <div class="card-body">
+          {% for field in form %}
+            {% if field.name|slice:":5" != "smtp_" %}
+              {% include "netbox_libreoxi/inc/email_field.html" %}
+            {% endif %}
+          {% endfor %}
+          {% if pdf_password_set %}
+            <div class="form-text libreoxi-pdfpass">{{ "ui.pdf_password_is_set"|tr:lang }}</div>
+          {% endif %}
+          {% if last_sent %}
+            <div class="form-text">{% trf "ui.last_sent" lang time=last_sent %}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary">{{ "ui.save"|tr:lang }}</button>
+    </form>
+
+    <div class="card mt-3">
+      <div class="card-body d-flex flex-wrap align-items-center gap-3">
+        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#libreoxi-test-modal"
+                {% if not recipient_list %}disabled{% endif %}>{{ "ui.send_test"|tr:lang }}</button>
+        {% if not recipient_list %}<div class="text-muted small">{{ "ui.test_need_recipients"|tr:lang }}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="libreoxi-test-modal" tabindex="-1" aria-labelledby="libreoxi-test-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" class="modal-content">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="test_email">
+      <div class="modal-header">
+        <h5 class="modal-title" id="libreoxi-test-title">{{ "ui.test_title"|tr:lang }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ "ui.cancel"|tr:lang }}"></button>
+      </div>
+      <div class="modal-body">
+        {% include "netbox_libreoxi/inc/recipients_pick.html" with prefix="libreoxi-test" %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ "ui.cancel"|tr:lang }}</button>
+        <button type="submit" class="btn btn-primary">{{ "ui.send"|tr:lang }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const toggle = (checkboxId, selector) => {
+      const box = document.getElementById(checkboxId);
+      if (!box) return;
+      const update = () => document.querySelectorAll(selector).forEach((el) => { el.style.display = box.checked ? '' : 'none'; });
+      box.addEventListener('change', update);
+      update();
+    };
+    toggle('id_smtp_auth', '.libreoxi-auth');
+    toggle('id_audit_pdf_protect', '.libreoxi-pdfpass');
+    const frequency = document.getElementById('id_audit_email_frequency');
+    if (frequency) {
+      const update = () => document.querySelectorAll('.libreoxi-weekday').forEach((el) => { el.style.display = frequency.value === 'weekly' ? '' : 'none'; });
+      frequency.addEventListener('change', update);
+      update();
+    }
+  })();
+</script>
+{% endblock %}

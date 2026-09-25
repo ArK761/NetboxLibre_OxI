@@ -7,6 +7,22 @@ from django import forms
 from dcim.models import Device, DeviceRole
 from utilities.forms.fields import DynamicModelMultipleChoiceField
 
+import re
+
+from django.core.validators import validate_email
+
+from .audit import (
+    AUDIT_CATEGORIES,
+    AUDIT_FIELD_KEYS,
+    DEFAULT_AUDIT_FIELDS,
+    audit_fields,
+    frequencies,
+    severities,
+    severity_map,
+    smtp_securities,
+    weekdays,
+)
+from .i18n import LANGUAGES, language_of, tr
 from .models import LibreOXISettings
 from .scheduler import validate_cron_schedule
 
@@ -70,6 +86,15 @@ class LibreOXISettingsForm(forms.ModelForm):
         help_text="Selecting a preset fills the cron field; the cron field is the value that is saved.",
     )
 
+    language = forms.ChoiceField(label="Language", choices=LANGUAGES)
+    audit_min_severity = forms.ChoiceField(label="Audit: minimum severity to report", choices=severities())
+    audit_fields = forms.MultipleChoiceField(
+        label="Audit: columns in the report",
+        choices=audit_fields(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "form-check-input"}),
+    )
+
     class Meta:
         model = LibreOXISettings
         fields = (
@@ -87,10 +112,60 @@ class LibreOXISettingsForm(forms.ModelForm):
             "device_roles",
             "devices",
             "datetime_format",
+            "language",
+            "audit_min_severity",
+            "audit_fields",
         )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        lang = language_of(self.instance)
+        for name, (label, help_text) in {
+            "librenms_url": ("set.librenms_url", None),
+            "oxidized_path": ("set.oxidized_path", None),
+            "api_token": ("set.api_token", None),
+            "storage_root": ("set.storage_root", None),
+            "request_timeout": ("set.request_timeout", None),
+            "schedule_preset": ("set.cron_preset", "set.cron_preset_help"),
+            "schedule_cron": ("set.schedule_cron", "set.schedule_cron_help"),
+            "retention_days": ("set.retention_days", None),
+            "retention_revisions": ("set.retention_revisions", None),
+            "verify_tls": ("set.verify_tls", None),
+            "enabled": ("set.enabled", None),
+            "device_roles": ("set.device_roles", "set.device_roles_help"),
+            "devices": ("set.devices", "set.devices_help"),
+            "datetime_format": ("set.datetime_format", "set.datetime_format_help"),
+        }.items():
+            if name in self.fields:
+                self.fields[name].label = tr(label, lang)
+                if help_text:
+                    self.fields[name].help_text = tr(help_text, lang)
+        self.fields["schedule_preset"].choices = (("", tr("set.cron_preset_select", lang)),) + tuple(
+            (value, tr(f"preset.{value}", lang)) for value, _label in SCHEDULE_PRESETS
+        )
+        self.fields["language"].label = tr("form.language", lang) + (" / Language" if lang != "en" else "")
+        self.fields["language"].help_text = tr("form.language_help", lang)
+        self.fields["audit_min_severity"].label = tr("form.min_severity", lang)
+        self.fields["audit_min_severity"].help_text = tr("form.min_severity_help", lang)
+        self.fields["audit_min_severity"].choices = severities(lang)
+        self.fields["audit_fields"].label = tr("form.fields", lang)
+        self.fields["audit_fields"].help_text = tr("form.fields_help", lang)
+        self.fields["audit_fields"].choices = audit_fields(lang)
+        configured = severity_map(self.instance)
+        for key, _default in AUDIT_CATEGORIES:
+            self.fields[f"audit_severity_{key}"] = forms.ChoiceField(
+                label=tr("form.severity_for", lang, category=tr(f"category.{key}", lang)),
+                choices=severities(lang),
+                initial=configured[key],
+            )
+        # ModelForm takes initial values from the instance (an empty list for new
+        # settings), which would leave all checkboxes unticked; use the defaults.
+        self.initial["audit_fields"] = self.instance.audit_fields or DEFAULT_AUDIT_FIELDS
+        order = list(self.fields)
+        severity_fields = [name for name in order if name.startswith("audit_severity_")]
+        rest = [name for name in order if name not in severity_fields]
+        position = rest.index("audit_min_severity")
+        self.order_fields(rest[:position] + severity_fields + rest[position:])
         self.fields["api_token"].initial = self.instance.api_token_encrypted
         self.fields["schedule_preset"].initial = ""
         if self.instance.pk:
@@ -154,6 +229,185 @@ class LibreOXISettingsForm(forms.ModelForm):
             instance.api_token_encrypted = token
         instance.device_role_ids = [obj.pk for obj in self.cleaned_data.get("device_roles", [])]
         instance.device_ids = [obj.pk for obj in self.cleaned_data.get("devices", [])]
+        instance.audit_severity_map = {
+            key: self.cleaned_data[f"audit_severity_{key}"] for key, _default in AUDIT_CATEGORIES
+        }
+        fields = list(self.cleaned_data.get("audit_fields") or [])
+        if "change" not in fields:
+            fields.append("change")
+        instance.audit_fields = [key for key in AUDIT_FIELD_KEYS if key in fields]
         if commit:
             instance.save()
         return instance
+
+
+class LibreOXIEmailForm(forms.ModelForm):
+    """E-mail delivery of the audit (separate page, similar to LibreNMS Email Options)."""
+
+    # Labels and help texts are set in __init__ in the configured language.
+    audit_email_enabled = forms.BooleanField(required=False)
+    smtp_from_name = forms.CharField(required=False)
+    smtp_from = forms.CharField(required=False)
+    smtp_host = forms.CharField(required=False)
+    smtp_port = forms.IntegerField(min_value=1, max_value=65535)
+    smtp_timeout = forms.IntegerField(min_value=1, max_value=300)
+    smtp_security = forms.ChoiceField(choices=smtp_securities())
+    smtp_auto_tls = forms.BooleanField(required=False)
+    smtp_auth = forms.BooleanField(required=False)
+    smtp_username = forms.CharField(required=False)
+    smtp_password_input = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+    )
+    audit_email_recipients = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "security@example.com, soc@example.com"}),
+    )
+    audit_email_frequency = forms.ChoiceField(choices=frequencies())
+    audit_email_weekday = forms.TypedChoiceField(choices=weekdays(), coerce=int)
+    audit_email_time = forms.CharField(widget=forms.TimeInput(attrs={"type": "time"}))
+    audit_send_empty = forms.BooleanField(required=False)
+    audit_email_attach_pdf = forms.BooleanField(required=False)
+    audit_pdf_protect = forms.BooleanField(required=False)
+    audit_pdf_password_input = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+    )
+
+    class Meta:
+        model = LibreOXISettings
+        fields = (
+            "smtp_from_name",
+            "smtp_from",
+            "smtp_host",
+            "smtp_port",
+            "smtp_timeout",
+            "smtp_security",
+            "smtp_auto_tls",
+            "smtp_auth",
+            "smtp_username",
+            "audit_email_enabled",
+            "audit_email_recipients",
+            "audit_email_frequency",
+            "audit_email_weekday",
+            "audit_email_time",
+            "audit_send_empty",
+            "audit_email_attach_pdf",
+        )
+
+    LABELS = {
+        "audit_email_enabled": ("form.enabled", None),
+        "smtp_from_name": ("form.from_name", "form.from_name_help"),
+        "smtp_from": ("form.from_email", "form.from_email_help"),
+        "smtp_host": ("form.smtp_host", "form.smtp_host_help"),
+        "smtp_port": ("form.smtp_port", None),
+        "smtp_timeout": ("form.smtp_timeout", None),
+        "smtp_security": ("form.security", None),
+        "smtp_auto_tls": ("form.auto_tls", "form.auto_tls_help"),
+        "smtp_auth": ("form.auth", None),
+        "smtp_username": ("form.username", None),
+        "smtp_password_input": ("form.password", "form.password_help"),
+        "audit_email_recipients": ("form.recipients", "form.recipients_help"),
+        "audit_email_frequency": ("form.frequency", None),
+        "audit_email_weekday": ("form.weekday", None),
+        "audit_email_time": ("form.time", "form.time_help"),
+        "audit_send_empty": ("form.send_empty", "form.send_empty_help"),
+        "audit_email_attach_pdf": ("form.attach_pdf", None),
+        "audit_pdf_protect": ("form.pdf_protect", None),
+        "audit_pdf_password_input": ("form.pdf_password", "form.pdf_password_help"),
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lang = lang = language_of(self.instance)
+        for name, (label, help_text) in self.LABELS.items():
+            self.fields[name].label = tr(label, lang)
+            self.fields[name].help_text = tr(help_text, lang) if help_text else ""
+        self.fields["smtp_security"].choices = smtp_securities(lang)
+        self.fields["audit_email_frequency"].choices = frequencies(lang)
+        self.fields["audit_email_weekday"].choices = weekdays(lang)
+        for field in self.fields.values():
+            widget = field.widget
+            if getattr(widget, "input_type", "") == "checkbox":
+                widget.attrs.setdefault("class", "form-check-input")
+                widget.attrs.setdefault("role", "switch")
+            elif isinstance(widget, forms.Select):
+                widget.attrs.setdefault("class", "form-select")
+            else:
+                widget.attrs.setdefault("class", "form-control")
+        self.order_fields(
+            [
+                "smtp_from_name",
+                "smtp_from",
+                "smtp_host",
+                "smtp_port",
+                "smtp_timeout",
+                "smtp_security",
+                "smtp_auto_tls",
+                "smtp_auth",
+                "smtp_username",
+                "smtp_password_input",
+                "audit_email_enabled",
+                "audit_email_recipients",
+                "audit_email_frequency",
+                "audit_email_weekday",
+                "audit_email_time",
+                "audit_send_empty",
+                "audit_email_attach_pdf",
+                "audit_pdf_protect",
+                "audit_pdf_password_input",
+            ]
+        )
+        self.fields["audit_pdf_protect"].initial = bool(self.instance.audit_pdf_password)
+
+    def clean_audit_email_recipients(self):
+        value = self.cleaned_data.get("audit_email_recipients", "") or ""
+        addresses = [address.strip() for address in re.split(r"[,;\s]+", value) if address.strip()]
+        for address in addresses:
+            try:
+                validate_email(address)
+            except forms.ValidationError as exc:
+                raise forms.ValidationError(tr("form.err_email", self.lang, address=address)) from exc
+        if self.cleaned_data.get("audit_email_enabled") and not addresses:
+            raise forms.ValidationError(tr("form.err_need_recipient", self.lang))
+        return ", ".join(addresses)
+
+    def clean_audit_email_time(self):
+        value = (self.cleaned_data.get("audit_email_time") or "").strip()[:5]
+        if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", value):
+            raise forms.ValidationError(tr("form.err_time", self.lang))
+        return value
+
+    def clean_smtp_from(self):
+        value = (self.cleaned_data.get("smtp_from") or "").strip()
+        if value:
+            try:
+                validate_email(value)
+            except forms.ValidationError as exc:
+                raise forms.ValidationError(tr("form.err_from", self.lang)) from exc
+        return value
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("audit_pdf_protect") and not cleaned.get("audit_pdf_password_input") and not self.instance.audit_pdf_password:
+            self.add_error("audit_pdf_password_input", tr("form.err_pdf_password", self.lang))
+        if cleaned.get("smtp_auth") and not (cleaned.get("smtp_username") or "").strip():
+            self.add_error("smtp_username", tr("form.err_username", self.lang))
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        password = self.cleaned_data.get("smtp_password_input")
+        if password:
+            instance.smtp_password = password
+        if not instance.smtp_auth:
+            instance.smtp_username = ""
+            instance.smtp_password = ""
+        if not self.cleaned_data.get("audit_pdf_protect"):
+            instance.audit_pdf_password = ""
+        elif self.cleaned_data.get("audit_pdf_password_input"):
+            instance.audit_pdf_password = self.cleaned_data["audit_pdf_password_input"]
+        if commit:
+            instance.save()
+        return instance
+

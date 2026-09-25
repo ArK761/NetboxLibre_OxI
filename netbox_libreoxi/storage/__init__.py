@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+FIRST_BACKUP_MARKER = "first_backup"
+
+
 def device_dir(root: str, device_id: int, create: bool = True) -> Path:
     path = Path(root).expanduser().resolve() / "devices" / str(device_id)
     if create:
@@ -50,6 +53,13 @@ def store_if_changed(root: str, device_id: int, content: str) -> dict:
     temp_hash.write_text(new_hash + "\n", encoding="ascii")
     temp_cfg.replace(directory / "current.cfg")
     temp_hash.replace(directory / "current.sha256")
+
+    if old_hash is None:
+        # First backup of this device: remember when it entered change monitoring,
+        # because retention may later delete the oldest revisions.
+        marker = directory / FIRST_BACKUP_MARKER
+        if not marker.exists():
+            marker.write_text(datetime.now(timezone.utc).isoformat(timespec="seconds"), encoding="ascii")
 
     return {
         "changed": True,

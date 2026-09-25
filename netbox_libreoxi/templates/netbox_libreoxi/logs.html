@@ -1,7 +1,7 @@
 {% extends 'base/layout.html' %}
 {% load libreoxi_tags static %}
 
-{% block title %}LibreOXI Logs{% endblock %}
+{% block title %}{{ "logs.title"|tr:lang }}{% endblock %}
 
 {% block content %}
 <style>
@@ -27,29 +27,42 @@
 
 <div class="card libreoxi-log-page">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <strong>LibreOXI Logs</strong>
-    <a class="btn btn-primary btn-sm" href="{% url 'plugins:netbox_libreoxi:settings' %}">Settings</a>
+    <strong>{{ "logs.title"|tr:lang }}</strong>
+    <a class="btn btn-primary btn-sm" href="{% url 'plugins:netbox_libreoxi:settings' %}">{{ "menu.settings"|tr:lang }}</a>
   </div>
 
   {% if not settings %}
-    <div class="card-body text-muted">LibreOXI is not configured.</div>
+    <div class="card-body text-muted">{{ "logs.not_configured"|tr:lang }}</div>
   {% else %}
     <div class="row g-0">
       <div class="col-md-4 border-end libreoxi-log-tree">
-        <div class="p-2 text-muted">Devices</div>
+        <div class="p-2 text-muted">{{ "logs.devices"|tr:lang }}</div>
+        <div class="px-2 pb-2 d-flex flex-wrap gap-1" role="group" title="{{ "ui.filter_hint"|tr:lang }}">
+          <a class="btn btn-sm {% if not status %}btn-secondary{% else %}btn-outline-secondary{% endif %}" href="?{{ filter_qs }}">{{ "ui.filter_all"|tr:lang }} <span class="badge text-bg-light ms-1">{{ status_total }}</span></a>
+          <a class="btn btn-sm {% if status == 'CHANGE' %}btn-warning{% else %}btn-outline-warning{% endif %}" href="?status=CHANGE{% if filter_qs %}&{{ filter_qs }}{% endif %}">CHANGE <span class="badge text-bg-light ms-1">{{ status_counts.CHANGE }}</span></a>
+          <a class="btn btn-sm {% if status == 'NOCHANGE' %}btn-success{% else %}btn-outline-success{% endif %}" href="?status=NOCHANGE{% if filter_qs %}&{{ filter_qs }}{% endif %}">NO CHANGE <span class="badge text-bg-light ms-1">{{ status_counts.NOCHANGE }}</span></a>
+          <a class="btn btn-sm {% if status == 'ERROR' %}btn-danger{% else %}btn-outline-danger{% endif %}" href="?status=ERROR{% if filter_qs %}&{{ filter_qs }}{% endif %}">ERROR <span class="badge text-bg-light ms-1">{{ status_counts.ERROR }}</span></a>
+        </div>
+        <form method="get" class="px-2 pb-2 d-flex gap-2">
+          {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+          <input class="form-control form-control-sm" type="search" name="q" value="{{ query }}" placeholder="{{ "ui.search_device"|tr:lang }}">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ "ui.search"|tr:lang }}</button>
+        </form>
         <div class="list-group list-group-flush">
           {% for device in devices %}
-            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_device and selected_device.pk == device.pk %}selected{% endif %}" href="?device={{ device.pk }}">
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_device and selected_device.pk == device.pk %}selected{% endif %}" href="?device={{ device.pk }}{% if list_qs %}&{{ list_qs }}{% endif %}">
               <span><strong>{{ device }}</strong>{% if device.primary_ip4 %}<small class="text-muted d-block">{{ device.primary_ip4.address.ip }}</small>{% endif %}</span>
               {% if device.latest_log %}{% if device.latest_log.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif device.latest_log.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif device.latest_log.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}{% endif %}
             </a>
-          {% empty %}<div class="p-3 text-muted">No devices are selected for LibreOXI monitoring.</div>{% endfor %}
+          {% empty %}<div class="p-3 text-muted">{% if query %}{{ "ui.no_match"|tr:lang }}{% else %}{{ "logs.no_devices"|tr:lang }}{% endif %}</div>{% endfor %}
         </div>
-        <div class="p-2 mt-2 text-muted border-top">Info</div>
+        {% if devices_more %}
+          <div class="p-2"><a class="btn btn-sm btn-outline-secondary w-100" href="{{ devices_more_url }}">{% trf "ui.show_more" lang count=20 %}</a></div>
+        {% endif %}
+        <div class="p-2 mt-2 text-muted border-top">{{ "logs.info"|tr:lang }}</div>
         <div class="list-group list-group-flush">
-          <a class="list-group-item list-group-item-action {% if not selected_device %}selected{% endif %}" href="{% url 'plugins:netbox_libreoxi:logs' %}">
-            <strong>Scheduled checks</strong>
-            <small class="text-muted d-block">{{ scheduled_runs|length }} recorded runs</small>
+          <a class="list-group-item list-group-item-action {% if not selected_device %}selected{% endif %}" href="{% url 'plugins:netbox_libreoxi:logs' %}{% if list_qs %}?{{ list_qs }}{% endif %}">
+            <strong>{{ "logs.scheduled"|tr:lang }}</strong>
           </a>
         </div>
       </div>
@@ -60,7 +73,7 @@
           {% if logs %}
             <div class="table-responsive">
               <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Date/time</th><th>Event</th><th class="text-end"></th></tr></thead>
+                <thead><tr><th>{{ "dev.datetime"|tr:lang }}</th><th>{{ "dev.event"|tr:lang }}</th><th class="text-end"></th></tr></thead>
                 <tbody>
                   {% for entry in logs %}
                     {% with row_no=forloop.counter|stringformat:'d' %}
@@ -68,10 +81,10 @@
                         <tr class="libreoxi-log-main-row">
                           <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
                           <td><span class="me-2">DEVICE BACKUP CHECK</span>{% if entry.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif entry.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif entry.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}</td>
-                          <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false" aria-controls="{{ detail_id }}" title="Details">⋮</button></td>
+                          <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false" aria-controls="{{ detail_id }}" title="{{ "dev.details"|tr:lang }}">⋮</button></td>
                         </tr>
                         <tr class="libreoxi-log-detail-row">
-                          <td colspan="3"><div id="{{ detail_id }}" class="libreoxi-log-detail collapse">{% with entry_hash=entry.message|log_hash %}<div class="text-muted small">{% if entry_hash %}SHA256{% else %}Information{% endif %}</div>{% if entry_hash %}<code>{{ entry_hash }}</code>{% else %}<span class="text-muted">No additional details available.</span>{% endif %}{% endwith %}</div></td>
+                          <td colspan="3"><div id="{{ detail_id }}" class="libreoxi-log-detail collapse">{% with entry_hash=entry.message|log_hash %}<div class="text-muted small">{% if entry_hash %}SHA256{% else %}{{ "dev.information"|tr:lang }}{% endif %}</div>{% if entry_hash %}<code>{{ entry_hash }}</code>{% else %}<span class="text-muted">{{ "dev.no_details"|tr:lang }}</span>{% endif %}{% endwith %}</div></td>
                         </tr>
                       {% endwith %}
                     {% endwith %}
@@ -79,13 +92,16 @@
                 </tbody>
               </table>
             </div>
-          {% else %}<div class="p-3 text-muted">No LibreOXI checks recorded for this device.</div>{% endif %}
+          {% else %}<div class="p-3 text-muted">{{ "dev.no_checks"|tr:lang }}</div>{% endif %}
+          {% if logs_more %}
+            <div class="p-2 border-top text-center"><a class="btn btn-sm btn-outline-secondary" href="{{ logs_more_url }}">{% trf "ui.show_more" lang count=20 %}</a></div>
+          {% endif %}
         {% else %}
-          <div class="p-3 border-bottom"><strong>Scheduled check information</strong></div>
+          <div class="p-3 border-bottom"><strong>{{ "logs.scheduled_info"|tr:lang }}</strong></div>
           {% if scheduled_runs %}
             <div class="table-responsive">
               <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Date/time</th><th>Run</th><th class="text-end"></th></tr></thead>
+                <thead><tr><th>{{ "dev.datetime"|tr:lang }}</th><th>{{ "logs.run"|tr:lang }}</th><th class="text-end"></th></tr></thead>
                 <tbody>
                   {% for entry in scheduled_runs %}
                     {% with row_no=forloop.counter|stringformat:'d' %}
@@ -94,20 +110,20 @@
                           <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
                           <td>
                             <span class="me-2">SCHEDULED CHECK</span>
-                            <strong>{{ entry.run_summary.devices }} device{{ entry.run_summary.devices|pluralize }}</strong>
-                            <span class="text-muted libreoxi-run-inline ms-2">Started {{ entry.run_summary.started }} · Finished {{ entry.run_summary.finished }} · Duration {{ entry.run_summary.duration }}s</span>
+                            <strong>{% trf "logs.devices_count" lang count=entry.run_summary.devices %}</strong>
+                            <span class="text-muted libreoxi-run-inline ms-2">{{ "logs.started"|tr:lang }} {{ entry.run_summary.started }} · {{ "logs.finished"|tr:lang }} {{ entry.run_summary.finished }} · {{ "logs.duration"|tr:lang }} {{ entry.run_summary.duration }}s</span>
                           </td>
-                          <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false" aria-controls="{{ detail_id }}" title="Details">⋮</button></td>
+                          <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false" aria-controls="{{ detail_id }}" title="{{ "dev.details"|tr:lang }}">⋮</button></td>
                         </tr>
                         <tr class="libreoxi-log-detail-row">
                           <td colspan="3"><div id="{{ detail_id }}" class="libreoxi-log-detail libreoxi-run-summary collapse">
-                            <div><strong>Devices checked:</strong> {{ entry.run_summary.devices }}</div>
-                            <div><strong>Started:</strong> {{ entry.run_summary.started }}</div>
-                            <div><strong>Finished:</strong> {{ entry.run_summary.finished }}</div>
-                            <div><strong>Duration:</strong> {{ entry.run_summary.duration }}s</div>
-                            <div><strong>Change:</strong> <span class="libreoxi-log-change">{{ entry.run_summary.change }}</span></div>
-                            <div><strong>No change:</strong> <span class="libreoxi-log-nochange">{{ entry.run_summary.nochange }}</span></div>
-                            <div><strong>Error:</strong> <span class="libreoxi-log-error">{{ entry.run_summary.error }}</span></div>
+                            <div><strong>{{ "logs.devices_checked"|tr:lang }}:</strong> {{ entry.run_summary.devices }}</div>
+                            <div><strong>{{ "logs.started"|tr:lang }}:</strong> {{ entry.run_summary.started }}</div>
+                            <div><strong>{{ "logs.finished"|tr:lang }}:</strong> {{ entry.run_summary.finished }}</div>
+                            <div><strong>{{ "logs.duration"|tr:lang }}:</strong> {{ entry.run_summary.duration }}s</div>
+                            <div><strong>{{ "logs.change"|tr:lang }}:</strong> <span class="libreoxi-log-change">{{ entry.run_summary.change }}</span></div>
+                            <div><strong>{{ "logs.no_change"|tr:lang }}:</strong> <span class="libreoxi-log-nochange">{{ entry.run_summary.nochange }}</span></div>
+                            <div><strong>{{ "logs.error"|tr:lang }}:</strong> <span class="libreoxi-log-error">{{ entry.run_summary.error }}</span></div>
                           </div></td>
                         </tr>
                       {% endwith %}
@@ -116,7 +132,10 @@
                 </tbody>
               </table>
             </div>
-          {% else %}<div class="p-3 text-muted">No scheduled refresh runs recorded yet.</div>{% endif %}
+          {% else %}<div class="p-3 text-muted">{{ "logs.no_runs"|tr:lang }}</div>{% endif %}
+          {% if logs_more %}
+            <div class="p-2 border-top text-center"><a class="btn btn-sm btn-outline-secondary" href="{{ logs_more_url }}">{% trf "ui.show_more" lang count=20 %}</a></div>
+          {% endif %}
         {% endif %}
       </div>
     </div>
