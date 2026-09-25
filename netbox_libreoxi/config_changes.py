@@ -67,6 +67,10 @@ ATTRIBUTE_LABELS = (
     (r"(trunk allowed vlan|allow-pass vlan|vlan trunk allowed|vlan members)", "allowed VLANs"),
     (r"(native vlan|native-vlan-id|pvid vlan|vlan trunk native)", "native VLAN"),
     (r"(switchport mode|port link-type|port-mode|interface-mode)", "port mode"),
+    (r"^vlan pvid$", "native VLAN (PVID)"),
+    (r"^vlan tagging$", "tagged VLANs"),
+    (r"^vlan participation include$", "member VLANs"),
+    (r"^vlan participation exclude$", "excluded VLANs"),
     (r"^untagged$", "untagged ports"),
     (r"^tagged$", "tagged ports"),
     (r"(ipv6 address)$", "IPv6 address"),
@@ -166,10 +170,42 @@ def _parse_indent(content: str) -> Node:
     return root
 
 
+BLOCK_OPENER = re.compile(r"^(interface\s|vlan database$|router\s|line\s|ip\s+routing|policy-map\s|class-map\s)")
+
+
+def _indent_exit_blocks(content: str) -> str:
+    """Indent flat blocks that are closed by "exit" (Ubiquiti EdgeSwitch, FASTPATH).
+
+    A block is an unindented opener (e.g. "interface 0/1") followed by
+    unindented lines up to an unindented "exit" with no other opener in between.
+    """
+    lines = content.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    result = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        result.append(line)
+        if line[:1].strip() and BLOCK_OPENER.match(line):
+            end = index + 1
+            while end < len(lines):
+                candidate = lines[end]
+                if candidate.strip() == "exit" and not candidate[:1].isspace():
+                    break
+                if candidate[:1].strip() and BLOCK_OPENER.match(candidate):
+                    end = len(lines)
+                    break
+                end += 1
+            if end < len(lines):
+                result.extend(" " + child if child.strip() else child for child in lines[index + 1 : end])
+                index = end
+        index += 1
+    return "\n".join(result)
+
+
 def parse_config(content: str) -> Node:
     if _is_brace_style(content):
         return _parse_braces(content)
-    return _parse_indent(content)
+    return _parse_indent(_indent_exit_blocks(content))
 
 
 # --------------------------------------------------------------------------
@@ -193,8 +229,25 @@ def _split_negation(line: str) -> tuple[bool, str]:
     return False, line
 
 
+VLAN_NAME_LINE = (
+    re.compile(r"^vlan\s+(?P<vlan>\d[\d,\-]*)\s+name\s+(?P<name>.+)$"),  # Allied Telesis
+    re.compile(r"^vlan\s+name\s+(?P<vlan>\d+)\s+(?P<name>.+)$"),  # Ubiquiti EdgeSwitch
+)
+
+
+def _vlan_name_line(line: str):
+    for pattern in VLAN_NAME_LINE:
+        match = pattern.match(line)
+        if match:
+            return match.group("vlan"), _strip_quotes(match.group("name"))
+    return None
+
+
 def line_key(line: str) -> str:
     """Return the attribute a line sets, so that old and new values pair up."""
+    vlan_name = _vlan_name_line(line)
+    if vlan_name:
+        return f"vlan {vlan_name[0]} name"
     _, body = _split_negation(line)
     tokens = body.split()
     if not tokens:
@@ -240,6 +293,9 @@ def _describe_object(path: list[str]) -> tuple[str, str]:
     """Return (category, human name) of the object a section path points to."""
     joined = " ".join(path)
     for header in reversed(path):
+        match = re.match(r"^interface\s+vlan\s*(\d+)$", header, re.IGNORECASE)
+        if match:
+            return "VLAN", f"VLAN {match.group(1)} (interface)"
         match = re.match(r"^interfaces?\s+(\S+)", header)
         if match:
             return "Interface", f"Interface {_strip_quotes(match.group(1))}"
@@ -353,6 +409,16 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
         state = "enabled (no shutdown)" if new_state else "disabled (shutdown)"
         return Change("modified", category, obj, f"{obj}: administratively {state}", old_line, new_line)
 
+    old_vlan_name, new_vlan_name = _vlan_name_line(old_line), _vlan_name_line(new_line)
+    if old_vlan_name and new_vlan_name:
+        vlan = new_vlan_name[0]
+        return Change("modified", "VLAN", f"VLAN {vlan}", f'VLAN {vlan}: name changed "{old_vlan_name[1]}" -> "{new_vlan_name[1]}"', old_line, new_line)
+
+    old_list = re.match(r"^vlan\s+(\d[\d,\-]*)$", old_line)
+    new_list = re.match(r"^vlan\s+(\d[\d,\-]*)$", new_line)
+    if old_list and new_list and obj == "vlan database":
+        return Change("modified", "VLAN", "VLAN list", f'VLAN list changed "{old_list.group(1)}" -> "{new_list.group(1)}"', old_line, new_line)
+
     label = _attribute_label(key)
     old_neg, _ = _split_negation(old_line)
     new_neg, _ = _split_negation(new_line)
@@ -386,6 +452,14 @@ def _single_line(action: str, category: str, obj: str, line: str, path: list[str
         enabled = state if action == "added" else not state
         text = "enabled (no shutdown)" if enabled else "disabled (shutdown)"
         return Change("modified", category, obj, f"{obj}: administratively {text}", old, new)
+
+    vlan_name = _vlan_name_line(line)
+    if vlan_name:
+        return Change(action, "VLAN", f"VLAN {vlan_name[0]}", f'VLAN {vlan_name[0]} {action} (name "{vlan_name[1]}")', old, new)
+    if path and path[-1] == "vlan database":
+        match = re.match(r"^vlan\s+(\d[\d,\-]*)$", line)
+        if match:
+            return Change(action, "VLAN", f"VLAN {match.group(1)}", f"VLAN list {match.group(1)} {action}", old, new)
 
     if not path:
         match = re.match(r"^vlan batch\s+(.+)$", line)
