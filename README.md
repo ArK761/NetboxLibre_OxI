@@ -86,7 +86,9 @@ Above the line-by-line diff, the comparison page lists the changes in human-read
 
 The configuration is parsed into sections without any external dependency, so it works across vendors:
 indentation-based configurations (Cisco IOS/NX-OS, Arista, Huawei, HP/Aruba, Fortinet), brace-based
-configurations (Juniper Junos, VyOS), `set`-style configurations (Junos/VyOS display set) and MikroTik exports.
+configurations (Juniper Junos, VyOS), `set`-style configurations (Junos/VyOS display set), MikroTik exports and
+pfSense/OPNsense `config.xml` (firewall rules, NAT, aliases, users, interfaces, VLANs, SNMP, web GUI). For pfSense the
+audit also shows who saved the configuration (from `<revision>`).
 Changes that only reorder lines or change comments/timestamps are ignored.
 
 #### Audit for the security manager
@@ -95,14 +97,17 @@ Every detected change is assigned an audit category and a severity:
 
 | Category | Default severity |
 |---|---|
-| Firewall / ACL | Critical |
+| Firewall / ACL / VPN (rules, NAT, aliases, VPN) | Critical |
 | Users and access (users, passwords, AAA) | Critical |
 | Device management (SNMP, SSH/HTTP, logging, NTP, management VLAN) | High |
-| Routing (static routes, OSPF, BGP, gateway) | High |
+| Routing (static routes, OSPF, BGP, gateway, interface IP addresses) | High |
 | VLANs (added/removed VLANs, port VLANs) | Medium |
 | Ports (shutdown/no shutdown, port security) | Medium |
 | Descriptions and names | Low |
 | Other changes | Low |
+
+The audit report is written in Slovak and describes changes in plain language, e.g.
+`VLAN 201 "## TEST ##" bola pridaná (na bridge1, tagovaná na portoch sfp-sfpplus2, sfp-sfpplus1).`
 
 Severities, the minimum severity reported to the security manager and the fields included in the
 report are configured in LibreOXI Settings. The compare page shows an **Audit preview** of exactly

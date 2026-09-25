@@ -14,7 +14,7 @@ from netbox.views import generic
 from utilities.views import ViewTab, register_model_view
 
 from . import audit
-from .config_changes import compare as compare_changes, summary as change_summary
+from .config_changes import compare as compare_changes, config_author, summary as change_summary
 from .forms import LibreOXISettingsForm
 from .models import LibreOXISettings
 from .oxi import fetch_device, monitored_devices
@@ -259,7 +259,8 @@ def compare_config(request, pk):
     changes = compare_changes(old_content, new_content)
     ip = str(device.primary_ip4.address.ip) if device.primary_ip4 else ""
     audit_report = audit.build_preview(
-        settings, device, ip, changes, _revision_time(settings, device, old_name), _revision_time(settings, device, new_name)
+        settings, device, ip, changes, _revision_time(settings, device, old_name), _revision_time(settings, device, new_name),
+        author=config_author(new_content),
     )
     audit_subject, _audit_text, audit_html = audit.render_report(settings, audit_report)
     return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff), "full_diff_html": mark_safe(full_diff), "old_display": fromdesc, "new_display": todesc, "changes": audit.annotate(settings, changes), "change_counts": change_summary(changes), "audit_report": audit_report, "audit_subject": audit_subject, "audit_html": mark_safe(audit_html), "audit_min_severity": audit.SEVERITY_LABEL.get(settings.audit_min_severity, settings.audit_min_severity)})

@@ -13,7 +13,9 @@ every change is described in human readable form, for example:
 
 from __future__ import annotations
 
+import hashlib
 import re
+import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass, field
 
 
@@ -60,7 +62,8 @@ NEGATIONS = ("no ", "undo ", "not ")
 
 # (regex over the key, label) used to name the attribute in change messages.
 ATTRIBUTE_LABELS = (
-    (r"(^| )(description|comments?)$", "description"),
+    (r"(^| )(description|comments?|descr)$", "description"),
+    (r"^type$", "action"),
     (r"(^| )alias$", "alias"),
     (r"(^| )members$", "VLAN members"),
     (r"(^| )name$", "name"),
@@ -93,6 +96,8 @@ ADMIN_STATE = {"shutdown", "disable", "set status down", "shutdown true"}
 class Node:
     text: str
     children: list = field(default_factory=list)
+    display: str = ""  # human name of a section (pfSense rules are keyed by tracker id)
+    key: str = ""  # attribute key of a leaf when known (XML tag)
 
 
 @dataclass
@@ -206,7 +211,103 @@ def _indent_exit_blocks(content: str) -> str:
     return "\n".join(result)
 
 
+# --------------------------------------------------------------------------
+# pfSense / OPNsense config.xml
+# --------------------------------------------------------------------------
+
+XML_ROOTS = ("pfsense", "opnsense")
+# Child elements that identify an entry in a list (firewall rules, VLANs, users ...).
+XML_ID_FIELDS = ("tracker", "vlanif", "name", "network", "refid", "uuid", "id")
+# Values that must never be shown; they are replaced by a short fingerprint so a
+# change is still detected.
+XML_SECRET_TAGS = {
+    "bcrypt-hash", "sha512-hash", "md5-hash", "password", "passwd", "prv", "key", "tls", "shared_key",
+    "pre-shared-key", "psk", "secret", "authorizedkeys", "radius_secret", "radius_secret2", "ldap_bindpw",
+    "rocommunity", "rwcommunity", "community", "apikey", "privkey",
+}
+XML_IGNORED_TAGS = {"revision", "lastchange", "version"}
+
+
+def _fingerprint(value: str) -> str:
+    return "*****#" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:8]
+
+
+def _xml_children(element) -> list[Node]:
+    counts: dict[str, int] = {}
+    for child in element:
+        counts[child.tag] = counts.get(child.tag, 0) + 1
+
+    nodes = []
+    for child in element:
+        tag = child.tag
+        if not isinstance(tag, str) or tag in XML_IGNORED_TAGS:
+            continue
+        if len(child) == 0:
+            text = (child.text or "").strip()
+            if tag in XML_SECRET_TAGS and text:
+                text = _fingerprint(text)
+            elif len(text) > 200:  # certificates and other blobs
+                text = _fingerprint(text)
+            nodes.append(Node(f"{tag} {text}".strip(), key=tag))
+            continue
+
+        values = {grand.tag: (grand.text or "").strip() for grand in child if len(grand) == 0}
+        identifier = ""
+        if tag not in ("source", "destination"):
+            identifier = next((values[name] for name in XML_ID_FIELDS if values.get(name)), "")
+        if not identifier and counts[tag] > 1:
+            identifier = values.get("descr", "")
+        header = f"{tag} {identifier}".strip()
+
+        descr = values.get("descr", "")
+        if tag == "vlan" and values.get("tag"):
+            display = f"vlan {values['tag']}" + (f" ({values['if']})" if values.get("if") else "")
+        elif tag in ("user", "group") or not descr or descr == identifier:
+            display = header
+        elif identifier:
+            display = f'{tag} "{descr}"'
+        else:
+            display = f"{header} ({descr})"
+        nodes.append(Node(header, _xml_children(child), display))
+    return nodes
+
+
+def _parse_xml(content: str) -> Node | None:
+    stripped = content.lstrip()
+    if not stripped.startswith("<") or "<!ENTITY" in content or "<!DOCTYPE" in content:
+        return None
+    try:
+        root = ElementTree.fromstring(stripped.encode("utf-8"))
+    except ElementTree.ParseError:
+        return None
+    if root.tag not in XML_ROOTS:
+        return None
+    return Node("", _xml_children(root))
+
+
+def config_author(content: str) -> str:
+    """Who saved the configuration (pfSense/OPNsense <revision>), if known."""
+    stripped = (content or "").lstrip()
+    if not stripped.startswith("<") or "<!ENTITY" in content or "<!DOCTYPE" in content:
+        return ""
+    try:
+        root = ElementTree.fromstring(stripped.encode("utf-8"))
+    except ElementTree.ParseError:
+        return ""
+    revision = root.find("revision")
+    if revision is None:
+        return ""
+    username = (revision.findtext("username") or "").strip()
+    description = (revision.findtext("description") or "").strip()
+    if username and description.startswith(username):
+        description = description[len(username):].lstrip(" :")
+    return ": ".join(part for part in (username, description) if part)
+
+
 def parse_config(content: str) -> Node:
+    xml_tree = _parse_xml(content)
+    if xml_tree is not None:
+        return xml_tree
     if _is_brace_style(content):
         return _parse_braces(content)
     return _parse_indent(_indent_exit_blocks(content))
@@ -361,6 +462,23 @@ def _describe_object(path: list[str]) -> tuple[str, str]:
         match = re.match(r"^vlan\s+(\d[\d,\-\s]*)$", header) or re.match(r"^vlans\s+(\S+)$", header)
         if match:
             return "VLAN", f"VLAN {_strip_quotes(match.group(1).strip())}"
+    # pfSense / OPNsense (config.xml)
+    if path and path[0] in ("filter", "nat"):
+        kind = "Firewall" if path[0] == "filter" else "NAT"
+        return "Security", " > ".join([kind] + path[1:])
+    if path and path[0] == "aliases" and len(path) > 1:
+        return "Security", "Firewall alias " + path[1].removeprefix("alias ").strip('"')
+    if path and path[0] in ("openvpn", "ipsec", "wireguard"):
+        return "Security", " > ".join(path)
+    if len(path) >= 2 and path[0] == "system" and path[1].startswith(("user ", "group ")):
+        kind, _, name = path[1].partition(" ")
+        return "System", f"{'User' if kind == 'user' else 'Group'} {name.strip(chr(34))}"
+    if path and path[0] in ("staticroutes", "gateways"):
+        return "Routing", " > ".join(path)
+    if len(path) >= 2 and path[0] == "vlans":
+        match = re.match(r"^vlan (\d+)(.*)$", path[1])
+        if match:
+            return "VLAN", f"VLAN {match.group(1)}{match.group(2)}"
     if len(path) >= 2 and path[0] in ("interfaces",):
         return "Interface", f"Interface {_strip_quotes(path[1])}"
     if len(path) >= 2 and path[0] == "vlans":
@@ -383,9 +501,9 @@ def _describe_object(path: list[str]) -> tuple[str, str]:
 def _summarise_section(node: Node) -> str:
     details = []
     for child in node.children:
-        key = line_key(child.text)
+        key = child.key or line_key(child.text)
         label = _attribute_label(key)
-        if label in ("name", "description", "access VLAN", "IP address", "VLAN ID"):
+        if label in ("name", "description", "access VLAN", "IP address", "VLAN ID", "action", "interface"):
             details.append(f"{label} {_value(child.text, key)}")
     return f" ({', '.join(details[:3])})" if details else ""
 
@@ -415,16 +533,16 @@ def _section_changes(path: list[str], old: list[Node], new: list[Node], out: lis
     for key in old_index.keys() & new_index.keys():
         old_node, new_node = old_index[key], new_index[key]
         if old_node.children or new_node.children:
-            _section_changes(path + [old_node.text], old_node.children, new_node.children, out)
+            _section_changes(path + [new_node.display or new_node.text], old_node.children, new_node.children, out)
 
     category, obj = _describe_object(path)
 
     # Sections (headers with children) that appear or disappear as a whole.
     for node in [n for n in removed if n.children]:
-        sub_category, sub_obj = _describe_object(path + [node.text])
+        sub_category, sub_obj = _describe_object(path + [node.display or node.text])
         out.append(Change("removed", sub_category, sub_obj, f"{sub_obj} removed{_summarise_section(node)}", old=node.text))
     for node in [n for n in added if n.children]:
-        sub_category, sub_obj = _describe_object(path + [node.text])
+        sub_category, sub_obj = _describe_object(path + [node.display or node.text])
         out.append(Change("added", sub_category, sub_obj, f"{sub_obj} added{_summarise_section(node)}", new=node.text))
 
     removed_lines = [n for n in removed if not n.children]
@@ -432,10 +550,10 @@ def _section_changes(path: list[str], old: list[Node], new: list[Node], out: lis
 
     old_by_key: dict[str, list[Node]] = {}
     for node in removed_lines:
-        old_by_key.setdefault(line_key(node.text), []).append(node)
+        old_by_key.setdefault(node.key or line_key(node.text), []).append(node)
     new_by_key: dict[str, list[Node]] = {}
     for node in added_lines:
-        new_by_key.setdefault(line_key(node.text), []).append(node)
+        new_by_key.setdefault(node.key or line_key(node.text), []).append(node)
 
     paired = set()
     for key in old_by_key.keys() & new_by_key.keys():

@@ -62,10 +62,10 @@
                       {% else %}<span class="badge text-bg-warning">Modified</span>{% endif %}
                     </td>
                     <td>
-                      {% if change.severity == "critical" %}<span class="badge text-bg-danger">Critical</span>
-                      {% elif change.severity == "high" %}<span class="badge text-bg-warning">High</span>
-                      {% elif change.severity == "medium" %}<span class="badge text-bg-info">Medium</span>
-                      {% else %}<span class="badge text-bg-secondary">Low</span>{% endif %}
+                      {% if change.severity == "critical" %}<span class="badge text-bg-danger">{{ change.severity_label }}</span>
+                      {% elif change.severity == "high" %}<span class="badge text-bg-warning">{{ change.severity_label }}</span>
+                      {% elif change.severity == "medium" %}<span class="badge text-bg-info">{{ change.severity_label }}</span>
+                      {% else %}<span class="badge text-bg-secondary">{{ change.severity_label }}</span>{% endif %}
                     </td>
                     <td>{{ change.category_label }}</td>
                     <td>{{ change.message }}</td>
@@ -84,18 +84,18 @@
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
           <div>
-            <strong>Audit preview &mdash; what will be sent to the security manager</strong>
+            <strong>Náhľad auditu &mdash; čo sa odošle manažérovi kybernetickej bezpečnosti</strong>
             <div class="small text-muted">
-              Minimum severity: {{ audit_min_severity }}.
-              {% if audit_report.skipped %}{{ audit_report.skipped }} change(s) below the minimum severity are not included.{% endif %}
-              Severities and fields are configured in LibreOXI Settings.
+              Minimálna závažnosť: {{ audit_min_severity }}.
+              {% if audit_report.skipped %}Zmeny pod minimálnou závažnosťou (počet: {{ audit_report.skipped }}) sa do auditu nezahrnú.{% endif %}
+              Závažnosti a polia sa nastavujú v LibreOXI Settings.
             </div>
           </div>
-          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#libreoxi-audit-preview">Show / hide</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#libreoxi-audit-preview">Zobraziť / skryť</button>
         </div>
         <div class="collapse show" id="libreoxi-audit-preview">
           <div class="card-body">
-            <div class="mb-2"><strong>Subject:</strong> <code>{{ audit_subject }}</code></div>
+            <div class="mb-2"><strong>Predmet:</strong> <code>{{ audit_subject }}</code></div>
             <div class="libreoxi-audit-mail">{{ audit_html }}</div>
           </div>
         </div>
