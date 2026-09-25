@@ -37,19 +37,25 @@
     <div class="row g-0">
       <div class="col-md-4 border-end libreoxi-log-tree">
         <div class="p-2 text-muted">{{ "logs.devices"|tr:lang }}</div>
+        <form method="get" class="px-2 pb-2 d-flex gap-2">
+          <input class="form-control form-control-sm" type="search" name="q" value="{{ query }}" placeholder="{{ "ui.search_device"|tr:lang }}">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ "ui.search"|tr:lang }}</button>
+        </form>
         <div class="list-group list-group-flush">
           {% for device in devices %}
-            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_device and selected_device.pk == device.pk %}selected{% endif %}" href="?device={{ device.pk }}">
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_device and selected_device.pk == device.pk %}selected{% endif %}" href="?device={{ device.pk }}{% if list_qs %}&{{ list_qs }}{% endif %}">
               <span><strong>{{ device }}</strong>{% if device.primary_ip4 %}<small class="text-muted d-block">{{ device.primary_ip4.address.ip }}</small>{% endif %}</span>
               {% if device.latest_log %}{% if device.latest_log.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif device.latest_log.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif device.latest_log.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}{% endif %}
             </a>
-          {% empty %}<div class="p-3 text-muted">{{ "logs.no_devices"|tr:lang }}</div>{% endfor %}
+          {% empty %}<div class="p-3 text-muted">{% if query %}{{ "ui.no_match"|tr:lang }}{% else %}{{ "logs.no_devices"|tr:lang }}{% endif %}</div>{% endfor %}
         </div>
+        {% if devices_more %}
+          <div class="p-2"><a class="btn btn-sm btn-outline-secondary w-100" href="{{ devices_more_url }}">{% trf "ui.show_more" lang count=20 %}</a></div>
+        {% endif %}
         <div class="p-2 mt-2 text-muted border-top">{{ "logs.info"|tr:lang }}</div>
         <div class="list-group list-group-flush">
-          <a class="list-group-item list-group-item-action {% if not selected_device %}selected{% endif %}" href="{% url 'plugins:netbox_libreoxi:logs' %}">
+          <a class="list-group-item list-group-item-action {% if not selected_device %}selected{% endif %}" href="{% url 'plugins:netbox_libreoxi:logs' %}{% if list_qs %}?{{ list_qs }}{% endif %}">
             <strong>{{ "logs.scheduled"|tr:lang }}</strong>
-            <small class="text-muted d-block">{% trf "logs.recorded_runs" lang count=scheduled_runs|length %}</small>
           </a>
         </div>
       </div>
@@ -80,6 +86,9 @@
               </table>
             </div>
           {% else %}<div class="p-3 text-muted">{{ "dev.no_checks"|tr:lang }}</div>{% endif %}
+          {% if logs_more %}
+            <div class="p-2 border-top text-center"><a class="btn btn-sm btn-outline-secondary" href="{{ logs_more_url }}">{% trf "ui.show_more" lang count=20 %}</a></div>
+          {% endif %}
         {% else %}
           <div class="p-3 border-bottom"><strong>{{ "logs.scheduled_info"|tr:lang }}</strong></div>
           {% if scheduled_runs %}
@@ -117,6 +126,9 @@
               </table>
             </div>
           {% else %}<div class="p-3 text-muted">{{ "logs.no_runs"|tr:lang }}</div>{% endif %}
+          {% if logs_more %}
+            <div class="p-2 border-top text-center"><a class="btn btn-sm btn-outline-secondary" href="{{ logs_more_url }}">{% trf "ui.show_more" lang count=20 %}</a></div>
+          {% endif %}
         {% endif %}
       </div>
     </div>

@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from difflib import HtmlDiff, SequenceMatcher
 
+from urllib.parse import quote
+
 from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import redirect, render, get_object_or_404
@@ -109,37 +111,88 @@ def _parse_log_line(line, settings):
     }
 
 
-def _read_log_lines(root):
+PAGE_FIRST = 10  # entries shown first
+PAGE_MORE = 20  # entries added by "Show 20 more"
+LOG_SCAN_LINES = 500_000  # safety limit when looking for the latest status of devices
+
+
+def _iter_log_lines_reverse(root, block_size=65536):
+    """Yield lines of libreoxi.log from the newest to the oldest, reading the file backwards in blocks."""
     path = Path(root).expanduser().resolve() / "libreoxi.log"
-    if not path.exists():
-        return []
     try:
-        return path.read_text(encoding="utf-8", errors="replace").splitlines()
+        handle = path.open("rb")
     except OSError:
-        return []
+        return
+    with handle:
+        handle.seek(0, 2)
+        position = handle.tell()
+        remainder = b""
+        while position > 0:
+            size = min(block_size, position)
+            position -= size
+            handle.seek(position)
+            chunk = handle.read(size) + remainder
+            lines = chunk.split(b"\n")
+            remainder = lines.pop(0)
+            for line in reversed(lines):
+                if line.strip():
+                    yield line.decode("utf-8", errors="replace")
+        if remainder.strip():
+            yield remainder.decode("utf-8", errors="replace")
 
 
-def read_device_logs(root, device, settings, limit=100):
+def _page_size(request, name):
+    try:
+        value = int(request.GET.get(name, PAGE_FIRST))
+    except (TypeError, ValueError):
+        value = PAGE_FIRST
+    return max(PAGE_FIRST, min(value, 5000))
+
+
+def read_device_logs(root, device, settings, limit=PAGE_FIRST):
+    """Newest log entries of a device; returns (entries, has_more)."""
     needle = str(device)
     entries = []
-    for line in reversed(_read_log_lines(root)):
+    for line in _iter_log_lines_reverse(root):
+        if needle not in line:
+            continue
         parsed = _parse_log_line(line, settings)
         if parsed["device_name"] == needle:
-            entries.append(parsed)
             if len(entries) >= limit:
-                break
-    return entries
+                return entries, True
+            entries.append(parsed)
+    return entries, False
 
 
-def read_scheduler_logs(root, settings, limit=100):
+def read_scheduler_logs(root, settings, limit=PAGE_FIRST):
+    """Newest scheduled run summaries; returns (entries, has_more)."""
     entries = []
-    for line in reversed(_read_log_lines(root)):
+    for line in _iter_log_lines_reverse(root):
+        if "scheduled refresh finished" not in line:
+            continue
         parsed = _parse_log_line(line, settings)
         if parsed["event"] == "SCHEDULER" and parsed["run_summary"]:
-            entries.append(parsed)
             if len(entries) >= limit:
-                break
-    return entries
+                return entries, True
+            entries.append(parsed)
+    return entries, False
+
+
+def latest_device_logs(root, devices, settings):
+    """Latest log entry of each given device in a single backwards pass over the log."""
+    wanted = {str(device): device for device in devices}
+    latest = {}
+    for scanned, line in enumerate(_iter_log_lines_reverse(root)):
+        if len(latest) == len(wanted) or scanned >= LOG_SCAN_LINES:
+            break
+        parts = line.split(" ", 2)
+        if len(parts) < 2 or parts[1] not in ("CHANGE", "NOCHANGE", "ERROR"):
+            continue
+        parsed = _parse_log_line(line, settings)
+        name = parsed["device_name"]
+        if name in wanted and name not in latest:
+            latest[name] = parsed
+    return latest
 
 
 def _history_path(settings, device, revision):
@@ -188,6 +241,7 @@ class DeviceLibreOXIView(generic.ObjectView):
         last_check = None
         storage_error = None
         device_logs = []
+        logs_more = False
         if settings:
             monitored = monitored_devices(settings).filter(pk=device.pk).exists()
             try:
@@ -204,7 +258,7 @@ class DeviceLibreOXIView(generic.ObjectView):
                     selected_name = revision
                 else:
                     selected_config = current
-                device_logs = read_device_logs(settings.storage_root, device, settings)
+                device_logs, logs_more = read_device_logs(settings.storage_root, device, settings, _page_size(request, "limit"))
             except OSError as exc:
                 storage_error = f"LibreOXI storage: {exc}"
         return render(request, "netbox_libreoxi/device_tab.html", {
@@ -212,6 +266,7 @@ class DeviceLibreOXIView(generic.ObjectView):
             "monitored": monitored, "current": current, "current_hash": current_hash,
             "selected_config": selected_config, "selected_name": selected_name, "history": history,
             "last_check": last_check, "storage_error": storage_error, "device_logs": device_logs,
+            "logs_more": logs_more, "more_limit": _page_size(request, "limit") + PAGE_MORE,
             "lang": language_of(settings),
         })
 
@@ -306,14 +361,47 @@ def logs_view(request):
     settings = LibreOXISettings.objects.first()
     if not settings:
         return render(request, "netbox_libreoxi/logs.html", {"settings": None, "devices": [], "selected_device": None, "logs": [], "scheduled_runs": [], "lang": "en"})
-    devices = list(monitored_devices(settings)); selected_id = request.GET.get("device", "").strip(); selected_device = None; logs = []
-    if selected_id.isdigit():
-        selected_device = next((device for device in devices if device.pk == int(selected_id)), None)
-        if selected_device: logs = read_device_logs(settings.storage_root, selected_device, settings)
+
+    query = request.GET.get("q", "").strip()
+    all_devices = monitored_devices(settings)
+    if query:
+        all_devices = all_devices.filter(name__icontains=query)
+    device_limit = _page_size(request, "devices")
+    devices = list(all_devices[: device_limit + 1])
+    devices_more = len(devices) > device_limit
+    devices = devices[:device_limit]
+
+    latest = latest_device_logs(settings.storage_root, devices, settings)
     for device in devices:
-        device_logs = read_device_logs(settings.storage_root, device, settings, limit=1); device.latest_log = device_logs[0] if device_logs else None
-    scheduled_runs = read_scheduler_logs(settings.storage_root, settings)
-    return render(request, "netbox_libreoxi/logs.html", {"settings": settings, "devices": devices, "selected_device": selected_device, "logs": logs, "scheduled_runs": scheduled_runs, "lang": language_of(settings)})
+        device.latest_log = latest.get(str(device))
+
+    limit = _page_size(request, "limit")
+    selected_device = None
+    logs, logs_more, scheduled_runs, runs_more = [], False, [], False
+    selected_id = request.GET.get("device", "").strip()
+    if selected_id.isdigit():
+        selected_device = monitored_devices(settings).filter(pk=int(selected_id)).first()
+    if selected_device:
+        logs, logs_more = read_device_logs(settings.storage_root, selected_device, settings, limit)
+    else:
+        scheduled_runs, runs_more = read_scheduler_logs(settings.storage_root, settings, limit)
+
+    def more_url(**changes):
+        params = request.GET.copy()
+        for key, value in changes.items():
+            params[key] = value
+        return f"?{params.urlencode()}"
+
+    return render(request, "netbox_libreoxi/logs.html", {
+        "settings": settings, "devices": devices, "selected_device": selected_device, "logs": logs,
+        "scheduled_runs": scheduled_runs, "lang": language_of(settings), "query": query,
+        "devices_more": devices_more, "devices_more_url": more_url(devices=device_limit + PAGE_MORE),
+        "logs_more": logs_more or runs_more, "logs_more_url": more_url(limit=limit + PAGE_MORE),
+        "device_limit": device_limit,
+        "list_qs": "&".join(
+            part for part in (f"q={quote(query)}" if query else "", f"devices={device_limit}" if device_limit != PAGE_FIRST else "") if part
+        ),
+    })
 
 
 def settings_view(request):

@@ -533,5 +533,9 @@ MESSAGES: dict[str, dict[str, str]] = {
     "form.err_pdf_password": {"en": "Enter the PDF password.", "sk": "Zadajte heslo k PDF.", "cs": "Zadejte heslo k PDF.", "de": "Bitte das PDF-Passwort eingeben."},
     "ui.attach_pdf": {"en": "Attach PDF", "sk": "Priložiť PDF", "cs": "Přiložit PDF", "de": "PDF anhängen"},
     "ui.body_hint": {"en": "The audit is always included in the e-mail body.", "sk": "Audit je vždy aj v texte e-mailu.", "cs": "Audit je vždy i v textu e-mailu.", "de": "Das Audit ist immer im E-Mail-Text enthalten."},
+    "ui.show_more": {"en": "Show {count} more", "sk": "Zobraziť ďalších {count}", "cs": "Zobrazit dalších {count}", "de": "{count} weitere anzeigen"},
+    "ui.search_device": {"en": "Search device…", "sk": "Hľadať zariadenie…", "cs": "Hledat zařízení…", "de": "Gerät suchen…"},
+    "ui.search": {"en": "Search", "sk": "Hľadať", "cs": "Hledat", "de": "Suchen"},
+    "ui.no_match": {"en": "No device matches the search.", "sk": "Hľadaniu nezodpovedá žiadne zariadenie.", "cs": "Hledání neodpovídá žádné zařízení.", "de": "Kein Gerät entspricht der Suche."},
 }
 # fmt: on
