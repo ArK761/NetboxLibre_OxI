@@ -11,7 +11,7 @@ class LibreOXISettings(models.Model):
     api_token_encrypted = models.TextField(blank=True, default="")
     storage_root = models.CharField(
         max_length=500,
-        default="/var/lib/netbox/libreoxi",
+        default="/opt/libreoxi",
     )
     request_timeout = models.PositiveIntegerField(default=10)
     check_interval_minutes = models.PositiveIntegerField(default=5)
