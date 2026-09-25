@@ -16,6 +16,7 @@ SEVERITY_KEYS = ("low", "medium", "high", "critical")
 SEVERITY_RANK = {key: rank for rank, key in enumerate(SEVERITY_KEYS)}
 
 AUDIT_CATEGORIES = (
+    ("firmware", "critical"),
     ("inventory", "medium"),
     ("firewall", "critical"),
     ("access", "critical"),
@@ -234,6 +235,10 @@ def audit_text(change: dict, lang: str = "en") -> str:
         )
         return tr("chg.new_device", lang, model=_paren(details))
 
+    match = re.match(r'^Firmware (.+?) changed "(.*)" -> "(.*)"$', message)
+    if match:
+        return tr("chg.firmware", lang, kind=match.group(1), old=match.group(2), new=match.group(3))
+
     # MikroTik bridge VLAN entry
     match = re.match(r"^VLAN (\S+) (added|removed) \((.*)\)$", message)
     if match and re.search(r"\b(bridge|tagged|untagged|interface) ", match.group(3)):
@@ -372,6 +377,8 @@ def audit_text(change: dict, lang: str = "en") -> str:
 def classify(change: Change) -> str:
     """Return the audit category key of a detected change."""
     text = " ".join((change.obj, change.message, change.old, change.new))
+    if change.obj == "Firmware":
+        return "firmware"
     if change.category == "Security" or _FIREWALL.search(text):
         return "firewall"
     if _ACCESS.search(change.old) or _ACCESS.search(change.new) or _ACCESS.search(change.obj):

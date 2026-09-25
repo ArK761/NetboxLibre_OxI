@@ -802,11 +802,64 @@ def _collapse_set_style(root: Node) -> Node:
     return grouped
 
 
+# --------------------------------------------------------------------------
+# Firmware / OS version
+# --------------------------------------------------------------------------
+
+# (label, regex) – the first group is the version. Checked on the raw text, because
+# the version is often only in a comment written by the device or by Oxidized.
+FIRMWARE_PATTERNS = (
+    ("RouterOS", re.compile(r"^#.*\bRouterOS\s+v?(\d[\w.\-]*)", re.M)),
+    ("RouterBOOT", re.compile(r"^#\s*current-firmware:\s*(\S+)", re.M)),
+    ("Instant On", re.compile(r"^vInstantOn_\w+?_(\d[\d.]*(?: \(\d+\))?)", re.M)),
+    ("FortiOS", re.compile(r"^#config-version=[^-\n]+-(\d[\d.]*)-FW-(build\d+)", re.M)),
+    ("ProCurve / ArubaOS", re.compile(r"^;\s*\S+ Configuration Editor; Created on release #(\S+)", re.M)),
+    ("EdgeSwitch", re.compile(r'^!.*System Software Version\s+"?([^"\s]+)', re.M)),
+    ("AlliedWare Plus", re.compile(r"^!.*AlliedWare Plus.*?\b[vV]?(\d+\.\d+\.\d+[\w.\-]*)", re.M)),
+    ("OS10", re.compile(r"^!\s*(?:OS10\s+)?Version\s+(\d[\w.\-]*)", re.M)),
+    ("IOS", re.compile(r"^!\s*Image:\s*Software:\s*[^,\n]+,\s*([\w.()]+)", re.M)),
+    ("IOS", re.compile(r"^!\s*(?:Image|Software).*?Version\s+([\w.()]+)", re.M)),
+    ("Junos", re.compile(r"^\s*version\s+(\d[\w.\-]*);\s*$", re.M)),
+    ("OS", re.compile(r"^version\s+(\d[\w.()]*)\s*$", re.M)),
+    ("firmware", re.compile(r"^[!#;]?\s*(?:software|firmware|os)\s+version\s*[:=]?\s*\"?(\d[\w.\-()]*)", re.M | re.I)),
+)
+
+
+def firmware_versions(content: str) -> dict[str, str]:
+    """Firmware / OS versions found in a configuration backup, e.g. {"RouterOS": "7.15.3"}."""
+    versions = {}
+    for label, pattern in FIRMWARE_PATTERNS:
+        match = pattern.search(content or "")
+        if match and label not in versions:
+            versions[label] = " ".join(group for group in match.groups() if group)
+    return versions
+
+
+def _firmware_changes(old_content: str, new_content: str) -> list[Change]:
+    old, new = firmware_versions(old_content), firmware_versions(new_content)
+    changes = []
+    for label in old.keys() & new.keys():
+        if old[label] != new[label]:
+            changes.append(
+                Change("modified", "System", "Firmware", f'Firmware {label} changed "{old[label]}" -> "{new[label]}"')
+            )
+    return changes
+
+
 def compare(old_content: str, new_content: str) -> list[Change]:
     old_tree = _collapse_set_style(parse_config(old_content))
     new_tree = _collapse_set_style(parse_config(new_content))
     changes: list[Change] = []
     _section_changes([], old_tree.children, new_tree.children, changes)
+    firmware = _firmware_changes(old_content, new_content)
+    if firmware:
+        # The version lines themselves (e.g. "version 15.2") are covered by the firmware change.
+        version_line = re.compile(r"^(?:version\s|v?InstantOn_|;\s*\S+ Configuration Editor)", re.I)
+        changes = [
+            change for change in changes
+            if not (version_line.match(change.old or "") or version_line.match(change.new or ""))
+        ]
+        changes = firmware + changes
     order = {"System": 0, "Interface": 1, "VLAN": 2, "Routing": 3, "Security": 4, "Section": 5}
     changes.sort(key=lambda change: (order.get(change.category, 9), change.obj, change.message))
     return changes

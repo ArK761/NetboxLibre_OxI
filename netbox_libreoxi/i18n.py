@@ -542,5 +542,18 @@ MESSAGES: dict[str, dict[str, str]] = {
     "chg.svi_removed": {"en": "VLAN interface {vlan} was removed{details}.", "sk": "VLAN rozhranie {vlan} bolo odstránené{details}.", "cs": "VLAN rozhraní {vlan} bylo odebráno{details}.", "de": "VLAN-Schnittstelle {vlan} wurde entfernt{details}."},
     "chg.interface_added": {"en": "{obj} was added{details}.", "sk": "{obj} bolo pridané{details}.", "cs": "{obj} bylo přidáno{details}.", "de": "{obj} wurde hinzugefügt{details}."},
     "chg.interface_removed": {"en": "{obj} was removed{details}.", "sk": "{obj} bolo odstránené{details}.", "cs": "{obj} bylo odebráno{details}.", "de": "{obj} wurde entfernt{details}."},
+    "category.firmware": {
+        "en": "Firmware / OS version (device software upgrade or downgrade)",
+        "sk": "Firmvér / verzia OS (aktualizácia alebo zníženie verzie softvéru zariadenia)",
+        "cs": "Firmware / verze OS (aktualizace nebo snížení verze softwaru zařízení)",
+        "de": "Firmware / OS-Version (Software-Update oder -Downgrade des Geräts)",
+    },
+    "category_short.firmware": {"en": "Firmware", "sk": "Firmvér", "cs": "Firmware", "de": "Firmware"},
+    "chg.firmware": {
+        "en": 'Firmware ({kind}) changed from "{old}" to "{new}".',
+        "sk": 'Firmvér ({kind}) – zmena verzie z "{old}" na "{new}".',
+        "cs": 'Firmware ({kind}) – změna verze z "{old}" na "{new}".',
+        "de": 'Firmware ({kind}) geändert von "{old}" auf "{new}".',
+    },
 }
 # fmt: on
