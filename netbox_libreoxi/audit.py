@@ -28,7 +28,8 @@ AUDIT_CATEGORIES = (
 )
 DEFAULT_SEVERITY = dict(AUDIT_CATEGORIES)
 
-AUDIT_FIELD_KEYS = ("time", "ip", "severity", "category", "change", "old", "new")
+# The audit describes changes in plain language; configuration lines are only shown on the compare page.
+AUDIT_FIELD_KEYS = ("time", "ip", "severity", "category", "change")
 DEFAULT_AUDIT_FIELDS = ["time", "ip", "severity", "category", "change"]
 
 
@@ -184,6 +185,37 @@ def _paren(text: str) -> str:
     return f" ({text})" if text else ""
 
 
+_PART = re.compile(
+    r'^(?P<label>[\w.\-]+) (?:(?P<set>set to) "(?P<value>.*)"|(?P<unset>unset)|changed "(?P<old>.*)" -> "(?P<new>.*)"|(?P<secret>changed))$'
+)
+
+
+def _value_parts(message: str, lang: str):
+    """"/system logging [0]: action set to "remote"; disabled unset" -> (object, [translated parts])."""
+    match = re.match(r"^(.+?): (.+)$", message)
+    if not match or not re.search(r' set to "| unset|; |^disabled changed "', match.group(2)):
+        return None
+    translated = []
+    for part in match.group(2).split("; "):
+        item = _PART.match(part)
+        if not item:
+            return None
+        label = _label(item.group("label"), lang)
+        state = item.group("value") if item.group("set") else item.group("new")
+        if item.group("label") == "disabled" and state in ("yes", "no", "true", "false"):
+            translated.append(tr("part.entry_disabled" if state in ("yes", "true") else "part.entry_enabled", lang))
+            continue
+        if item.group("set"):
+            translated.append(tr("part.set", lang, label=label, value=item.group("value")))
+        elif item.group("unset"):
+            translated.append(tr("part.unset", lang, label=label))
+        elif item.group("secret"):
+            translated.append(tr("part.changed_secret", lang, label=label))
+        else:
+            translated.append(tr("part.changed", lang, label=label, old=item.group("old"), new=item.group("new")))
+    return match.group(1), translated
+
+
 def audit_text(change: dict, lang: str = "en") -> str:
     """Plain-language description of a change for the audit (no configuration lines)."""
     message = change.get("message", "")
@@ -271,6 +303,14 @@ def audit_text(change: dict, lang: str = "en") -> str:
     if match:
         return tr("chg.user_modified", lang, name=match.group(1))
 
+    parts = _value_parts(message, lang)
+    if parts:
+        return tr("chg.parts", lang, obj=_object_name(parts[0], lang), parts="; ".join(parts[1]))
+
+    match = re.match(r'^(/\S.*?): line (added|removed) "add (.*)"$', message)
+    if match:
+        return tr(f"chg.entry_{match.group(2)}", lang, obj=match.group(1), values=match.group(3))
+
     match = re.match(r'^(.+?): (.+?) changed "(.*)" -> "(.*)"(.*)$', message)
     if match:
         return tr(
@@ -310,7 +350,10 @@ def audit_text(change: dict, lang: str = "en") -> str:
 
     match = re.match(r"^(.+?) (added|removed)(?: \((.*)\))?$", message)
     if match:
-        details = _paren(_details(match.group(3), lang)) if match.group(3) else ""
+        raw = match.group(3) or ""
+        if match.group(1).startswith("/"):
+            raw = re.sub(r"(^|; )add ", r"\1", raw)
+        details = _paren(_details(raw, lang)) if raw else ""
         return tr(f"chg.section_{match.group(2)}", lang, obj=_object_name(match.group(1), lang), details=details)
 
     return message
@@ -517,6 +560,13 @@ def _format_time(value: datetime, settings) -> str:
 SEVERITY_COLOR = {"low": "#6c757d", "medium": "#d39e00", "high": "#fd7e14", "critical": "#dc3545"}
 
 
+def report_fields(settings) -> list[str]:
+    fields = [field for field in (getattr(settings, "audit_fields", None) or DEFAULT_AUDIT_FIELDS) if field in AUDIT_FIELD_KEYS]
+    if "change" not in fields:
+        fields.append("change")
+    return fields
+
+
 def severity_summary(report: dict, lang: str) -> str:
     counts = report["counts"]
     return ", ".join(
@@ -539,7 +589,7 @@ def report_subject(settings, report: dict) -> str:
 def render_report(settings, report: dict) -> tuple[str, str, str]:
     """Return (subject, plain text, HTML) of the audit e-mail."""
     lang = language_of(settings)
-    fields = [field for field in (getattr(settings, "audit_fields", None) or DEFAULT_AUDIT_FIELDS)]
+    fields = report_fields(settings)
     labels = dict(audit_fields(lang))
     period = report_period(settings, report)
     summary = severity_summary(report, lang)

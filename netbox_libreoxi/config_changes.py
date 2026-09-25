@@ -620,20 +620,25 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
     if "=" in old_line and "=" in new_line:  # MikroTik "add name=x vlan-id=10"
         old_kv = _key_values(old_line)
         new_kv = _key_values(new_line)
-        diffs = [
-            f"{name} changed"
-            if re.search(r"(password|secret|key|psk|passphrase|community)", name, re.IGNORECASE)
-            else f'{name} changed "{old_kv.get(name, "")}" -> "{new_kv.get(name, "")}"'
-            for name in sorted(old_kv.keys() | new_kv.keys())
-            if old_kv.get(name) != new_kv.get(name)
-        ]
+        diffs = []
+        for name in sorted(old_kv.keys() | new_kv.keys()):
+            if old_kv.get(name) == new_kv.get(name):
+                continue
+            if re.search(r"(password|secret|key|psk|passphrase|community)", name, re.IGNORECASE):
+                diffs.append(f"{name} changed")
+            elif name not in old_kv:
+                diffs.append(f'{name} set to "{new_kv[name]}"')
+            elif name not in new_kv:
+                diffs.append(f"{name} unset")
+            else:
+                diffs.append(f'{name} changed "{old_kv[name]}" -> "{new_kv[name]}"')
         item = key.split(" ", 1)[1] if " " in key else ""
         # "set 3 disabled=yes" -> item "3"; "set show-at-login=yes" -> item is an attribute, not an entry
         target = obj if not item or f"{item.split()[0]}=" in old_line else f"{obj} [{item}]"
         vlan = new_kv.get("vlan-ids") or new_kv.get("vlan-id")
         if vlan and old_kv.get("vlan-ids", old_kv.get("vlan-id")) == vlan:
             category, target = "VLAN", f"VLAN {vlan}"
-        return Change("modified", category, target, f"{target}: {', '.join(diffs)}", old_line, new_line)
+        return Change("modified", category, target, f"{target}: {'; '.join(diffs)}", old_line, new_line)
     old_value, new_value = _value(old_line, key), _value(new_line, key)
     if label == "hostname":
         return Change("modified", "System", "Hostname", f'Hostname changed "{old_value}" -> "{new_value}"', old_line, new_line)
@@ -688,6 +693,21 @@ def _single_line(action: str, category: str, obj: str, line: str, path: list[str
         ]
         suffix = f" ({', '.join(details)})" if details else ""
         return Change(action, "VLAN", f"VLAN {vlan}", f"VLAN {vlan} {action}{suffix}", old, new)
+
+    tokens = line.split()
+    if kv and path and path[0].startswith("/") and tokens[0] == "set":
+        # MikroTik "set 0 action=remote" / "set show-at-login=yes": describe the values that were set
+        item = f" [{tokens[1]}]" if len(tokens) > 1 and "=" not in tokens[1] else ""
+        values = _key_values(line)
+        if action == "added":
+            parts = [
+                f"{name} changed" if re.search(r"(password|secret|key|psk|passphrase|community)", name, re.IGNORECASE)
+                else f'{name} set to "{value}"'
+                for name, value in values.items()
+            ]
+        else:
+            parts = [f"{name} unset" for name in values]
+        return Change("modified", category, obj, f"{obj}{item}: {'; '.join(parts)}", old, new)
 
     key = line_key(line)
     label = _attribute_label(key)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
-from .audit import DEFAULT_AUDIT_FIELDS, _format_time, audit_fields, audit_text, report_period, severity_summary
+from .audit import DEFAULT_AUDIT_FIELDS, _format_time, audit_fields, audit_text, report_fields, report_period, severity_summary
 from .i18n import language_of, tr
 
 
@@ -45,7 +45,7 @@ def build_pdf(settings, report: dict, subject: str) -> bytes:
     device_title = ParagraphStyle("device", parent=base, fontName=FONT_BOLD, fontSize=11, leading=14, spaceBefore=8)
     badge = ParagraphStyle("badge", parent=base, fontName=FONT_BOLD, textColor=colors.white, alignment=TA_CENTER)
 
-    fields = [field for field in (getattr(settings, "audit_fields", None) or DEFAULT_AUDIT_FIELDS) if field != "ip"]
+    fields = [field for field in report_fields(settings) if field != "ip"]
     labels = dict(audit_fields(lang))
     widths = {"time": 35 * mm, "severity": 23 * mm, "category": 40 * mm, "old": 55 * mm, "new": 55 * mm}
     page_width = landscape(A4)[0] - 24 * mm

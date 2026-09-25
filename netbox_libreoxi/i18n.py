@@ -506,5 +506,14 @@ MESSAGES: dict[str, dict[str, str]] = {
     "preset.0 0 * * *": {"en": "Every day at 00:00", "sk": "Každý deň o 00:00", "cs": "Každý den v 00:00", "de": "Täglich um 00:00"},
     "cmp.no_diff": {"en": "No Differences Found", "sk": "Žiadne rozdiely", "cs": "Žádné rozdíly", "de": "Keine Unterschiede"},
     "cmp.empty_file": {"en": "Empty File", "sk": "Prázdny súbor", "cs": "Prázdný soubor", "de": "Leere Datei"},
+    "chg.parts": {"en": "{obj}: {parts}."},
+    "part.set": {"en": '{label} set to "{value}"', "sk": 'nastavenie {label} = "{value}"', "cs": 'nastavení {label} = "{value}"', "de": '{label} auf "{value}" gesetzt'},
+    "part.entry_disabled": {"en": "entry disabled", "sk": "položka vypnutá", "cs": "položka vypnuta", "de": "Eintrag deaktiviert"},
+    "part.entry_enabled": {"en": "entry enabled", "sk": "položka zapnutá", "cs": "položka zapnuta", "de": "Eintrag aktiviert"},
+    "part.unset": {"en": "{label} removed", "sk": "{label} odstránené", "cs": "{label} odebráno", "de": "{label} entfernt"},
+    "part.changed": {"en": '{label} changed from "{old}" to "{new}"', "sk": '{label} – zmena z "{old}" na "{new}"', "cs": '{label} – změna z "{old}" na "{new}"', "de": '{label} geändert von "{old}" auf "{new}"'},
+    "part.changed_secret": {"en": "{label} changed", "sk": "{label} – zmenené", "cs": "{label} – změněno", "de": "{label} geändert"},
+    "chg.entry_added": {"en": "New entry ({obj}): {values}", "sk": "Nová položka ({obj}): {values}", "cs": "Nová položka ({obj}): {values}", "de": "Neuer Eintrag ({obj}): {values}"},
+    "chg.entry_removed": {"en": "Entry removed ({obj}): {values}", "sk": "Odstránená položka ({obj}): {values}", "cs": "Odebraná položka ({obj}): {values}", "de": "Eintrag entfernt ({obj}): {values}"},
 }
 # fmt: on
