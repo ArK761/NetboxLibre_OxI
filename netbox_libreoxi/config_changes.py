@@ -809,14 +809,24 @@ def _collapse_set_style(root: Node) -> Node:
 # (label, regex) – the first group is the version. Checked on the raw text, because
 # the version is often only in a comment written by the device or by Oxidized.
 FIRMWARE_PATTERNS = (
-    ("RouterOS", re.compile(r"^#.*\bRouterOS\s+v?(\d[\w.\-]*)", re.M)),
+    # pfSense / OPNsense: Oxidized appends "<!-- PFsense 26.03-RELEASE -->" / "<!-- OPNsense 24.7.5 -->"
+    ("pfSense", re.compile(r"<!--\s*pfsense\s+(\S+)\s*-->", re.I)),
+    ("OPNsense", re.compile(r"<!--\s*opnsense\s+(\S+)", re.I)),
+    # MikroTik: Oxidized comments "/system package update print" and "/system resource print"
+    ("RouterOS", re.compile(r"^#\s*(?:installed|current)-version:\s*(\d\S*)", re.M)),
+    ("RouterOS", re.compile(r"^#\s*version:\s*(\d\S*)", re.M)),
+    ("RouterOS", re.compile(r"^#.*\bby RouterOS\s+v?(\d[\w.\-]*)", re.M)),
     ("RouterBOOT", re.compile(r"^#\s*current-firmware:\s*(\S+)", re.M)),
-    ("Instant On", re.compile(r"^vInstantOn_\w+?_(\d[\d.]*(?: \(\d+\))?)", re.M)),
+    # HPE Aruba Instant On 1930 startup configuration header
+    ("Instant On", re.compile(r"^\s*vInstantOn_\w+?_(\d[\d.]*(?: \(\d+\))?)", re.M)),
     ("FortiOS", re.compile(r"^#config-version=[^-\n]+-(\d[\d.]*)-FW-(build\d+)", re.M)),
     ("ProCurve / ArubaOS", re.compile(r"^;\s*\S+ Configuration Editor; Created on release #(\S+)", re.M)),
     ("EdgeSwitch", re.compile(r'^!.*System Software Version\s+"?([^"\s]+)', re.M)),
     ("AlliedWare Plus", re.compile(r"^!.*AlliedWare Plus.*?\b[vV]?(\d+\.\d+\.\d+[\w.\-]*)", re.M)),
+    # Dell OS10: Oxidized comments "show inventory" ("Software version : 10.5.4.0")
+    ("OS10", re.compile(r"^!\s*Software version\s*:\s*(\d\S*)", re.M | re.I)),
     ("OS10", re.compile(r"^!\s*(?:OS10\s+)?Version\s+(\d[\w.\-]*)", re.M)),
+    # Cisco IOS: Oxidized comment "! Image: Software: C2960X-UNIVERSALK9-M, 15.2(7)E3, RELEASE SOFTWARE (fc2)"
     ("IOS", re.compile(r"^!\s*Image:\s*Software:\s*[^,\n]+,\s*([\w.()]+)", re.M)),
     ("IOS", re.compile(r"^!\s*(?:Image|Software).*?Version\s+([\w.()]+)", re.M)),
     ("Junos", re.compile(r"^\s*version\s+(\d[\w.\-]*);\s*$", re.M)),
@@ -829,6 +839,8 @@ def firmware_versions(content: str) -> dict[str, str]:
     """Firmware / OS versions found in a configuration backup, e.g. {"RouterOS": "7.15.3"}."""
     versions = {}
     for label, pattern in FIRMWARE_PATTERNS:
+        if label == "firmware" and versions:
+            break  # generic fallback only when no vendor specific version was found
         match = pattern.search(content or "")
         if match and label not in versions:
             versions[label] = " ".join(group for group in match.groups() if group)
