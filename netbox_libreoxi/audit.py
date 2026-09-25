@@ -9,42 +9,56 @@ from html import escape
 from pathlib import Path
 
 from .config_changes import Change
+from .i18n import MESSAGES, language_of, tr
 
 
-SEVERITIES = (
-    ("low", "Nízka"),
-    ("medium", "Stredná"),
-    ("high", "Vysoká"),
-    ("critical", "Kritická"),
-)
-SEVERITY_PLURAL = {"low": "nízke", "medium": "stredné", "high": "vysoké", "critical": "kritické"}
-SEVERITY_RANK = {key: rank for rank, (key, _) in enumerate(SEVERITIES)}
-SEVERITY_LABEL = dict(SEVERITIES)
+SEVERITY_KEYS = ("low", "medium", "high", "critical")
+SEVERITY_RANK = {key: rank for rank, key in enumerate(SEVERITY_KEYS)}
 
 AUDIT_CATEGORIES = (
-    ("inventory", "Zariadenia v monitorovaní (nové zariadenie, prvá záloha konfigurácie)", "medium"),
-    ("firewall", "Firewall / ACL / VPN (pravidlá, NAT, aliasy, VPN)", "critical"),
-    ("access", "Používatelia a prístup (účty, heslá, AAA)", "critical"),
-    ("management", "Správa zariadenia (SNMP, SSH/HTTP, logovanie, NTP, manažment VLAN)", "high"),
-    ("routing", "Smerovanie (statické trasy, OSPF, BGP, brána)", "high"),
-    ("vlan", "VLAN (pridané/odstránené VLAN, VLAN na portoch)", "medium"),
-    ("port", "Porty (vypnutie/zapnutie, port security)", "medium"),
-    ("description", "Popisy a názvy (popis portu, názov VLAN, názov zariadenia)", "low"),
-    ("other", "Ostatné zmeny", "low"),
+    ("inventory", "medium"),
+    ("firewall", "critical"),
+    ("access", "critical"),
+    ("management", "high"),
+    ("routing", "high"),
+    ("vlan", "medium"),
+    ("port", "medium"),
+    ("description", "low"),
+    ("other", "low"),
 )
-AUDIT_CATEGORY_LABEL = {key: label.split(" (")[0] for key, label, _ in AUDIT_CATEGORIES}
-DEFAULT_SEVERITY = {key: severity for key, _, severity in AUDIT_CATEGORIES}
+DEFAULT_SEVERITY = dict(AUDIT_CATEGORIES)
 
-AUDIT_FIELDS = (
-    ("time", "Čas"),
-    ("ip", "IP zariadenia"),
-    ("severity", "Závažnosť"),
-    ("category", "Kategória"),
-    ("change", "Zmena"),
-    ("old", "Pôvodný riadok"),
-    ("new", "Nový riadok"),
-)
+AUDIT_FIELD_KEYS = ("time", "ip", "severity", "category", "change", "old", "new")
 DEFAULT_AUDIT_FIELDS = ["time", "ip", "severity", "category", "change"]
+
+
+def severities(lang: str = "en") -> list[tuple[str, str]]:
+    return [(key, tr(f"severity.{key}", lang)) for key in SEVERITY_KEYS]
+
+
+def severity_label(key: str, lang: str = "en") -> str:
+    return tr(f"severity.{key}", lang)
+
+
+def category_label(key: str, lang: str = "en", short: bool = True) -> str:
+    return tr(f"category_short.{key}" if short else f"category.{key}", lang)
+
+
+def audit_fields(lang: str = "en") -> list[tuple[str, str]]:
+    return [(key, tr(f"field.{key}", lang)) for key in AUDIT_FIELD_KEYS]
+
+
+def frequencies(lang: str = "en") -> list[tuple[str, str]]:
+    return [(key, tr(f"frequency.{key}", lang)) for key in ("daily", "weekly", "monthly")]
+
+
+def weekdays(lang: str = "en") -> list[tuple[int, str]]:
+    return [(day, tr(f"weekday.{day}", lang)) for day in range(7)]
+
+
+def smtp_securities(lang: str = "en") -> list[tuple[str, str]]:
+    return [(key, tr(f"security.{key}", lang)) for key in ("none", "ssl", "starttls")]
+
 
 AUDIT_FILE = "audit.jsonl"
 LAST_SENT_FILE = ".audit_last_sent"
@@ -95,133 +109,113 @@ def mask_secrets(text: str) -> str:
     return _SECRET.sub(lambda match: f"{match.group('key')}*****", text)
 
 
-LABEL_SK = {
-    "description": "popis",
-    "name": "názov",
-    "alias": "alias",
-    "hostname": "názov zariadenia",
-    "access VLAN": "prístupová VLAN",
-    "allowed VLANs": "povolené VLAN",
-    "native VLAN (PVID)": "natívna VLAN (PVID)",
-    "native VLAN": "natívna VLAN",
-    "untagged VLANs": "netagované VLAN",
-    "tagged VLANs": "tagované VLAN",
-    "member VLANs": "členské VLAN",
-    "excluded VLANs": "vylúčené VLAN",
-    "VLAN members": "členovia VLAN",
-    "port mode": "režim portu",
-    "untagged ports": "netagované porty",
-    "tagged ports": "tagované porty",
-    "IPv6 address": "IPv6 adresa",
-    "IP address": "IP adresa",
-    "ipaddr": "IP adresa",
-    "subnet": "maska siete",
-    "VLAN ID": "VLAN ID",
-    "speed": "rýchlosť",
-    "location": "umiestnenie",
-    "syslocation": "umiestnenie (SNMP)",
-    "contact": "kontakt",
-    "action": "akcia",
-    "interface": "rozhranie",
-    "protocol": "protokol",
-    "port": "port",
-    "power inline priority": "priorita PoE",
-    "power inline": "PoE",
-    "bcrypt-hash": "heslo",
-    "sha512-hash": "heslo",
-    "password": "heslo",
+# Parser labels (and raw XML tags) normalised to the English label used as translation key.
+LABEL_ALIASES = {
+    "bcrypt-hash": "password",
+    "sha512-hash": "password",
+    "md5-hash": "password",
+    "password": "password",
+    "ipaddr": "IP address",
+    "ipaddrv6": "IPv6 address",
+    "subnet": "subnet mask",
     "rocommunity": "SNMP community",
     "rwcommunity": "SNMP community",
+    "syslocation": "SNMP location",
+    "power inline priority": "PoE priority",
+    "power inline": "PoE",
 }
-MODE_SK = {"tagged": "tagovane", "untagged": "netagovane", "allowed": "povolená", "member": "ako člen"}
 
 
-def _label(label: str) -> str:
-    return LABEL_SK.get(label, label)
+def _label(label: str, lang: str) -> str:
+    label = LABEL_ALIASES.get(label, label)
+    translated = tr(f"label.{label}", lang)
+    return label if translated == f"label.{label}" else translated
 
 
-def _details(details: str) -> str:
-    """"name tech, description Technician" -> "názov: tech, popis: Technician"."""
+def _details(details: str, lang: str) -> str:
+    """"name tech, description Technician" -> "name: tech, description: Technician" (translated labels)."""
+    known = sorted((key[len("label."):] for key in MESSAGES if key.startswith("label.")), key=len, reverse=True)
     parts = []
     for part in re.split(r",\s+(?=[A-Za-z])", details):
-        for english in sorted(LABEL_SK, key=len, reverse=True):
+        for english in known:
             if part.startswith(english + " "):
-                part = f"{LABEL_SK[english]}: {part[len(english) + 1:]}"
+                part = f"{_label(english, lang)}: {part[len(english) + 1:]}"
                 break
         parts.append(part)
     return ", ".join(parts)
 
 
-def _object_name(obj: str) -> str:
-    """English object names from the parser -> Slovak names for the audit."""
+def _object_name(obj: str, lang: str) -> str:
+    """Parser object names -> names for the audit in the chosen language."""
     if obj in ("Global configuration", ""):
-        return "Zariadenie"
+        return tr("obj.device", lang)
     obj = re.sub(r" \(interface\)$", "", obj)
-    obj = re.sub(r"^Interface ((?:wan|lan|opt\d+)\b)", r"Rozhranie \1", obj)
-    obj = re.sub(r"^Interface ", "Port ", obj)
-    obj = re.sub(r'^Firewall > rule ("[^"]*"|\S+)', r"Pravidlo firewallu \1", obj)
-    obj = re.sub(r"^NAT > ", "NAT > ", obj)
-    obj = re.sub(r"^Firewall alias ", "Alias firewallu ", obj)
-    obj = re.sub(r"^User ", "Používateľský účet ", obj)
-    obj = re.sub(r"^Group ", "Skupina ", obj)
-    obj = re.sub(r"^system > ", "Systém > ", obj)
+    # Firewall interfaces (pfSense wan/lan/optN) are "interfaces", switch interfaces are "ports".
+    obj = re.sub(r"^Interface (?!(?:wan|lan|opt\d+)\b)", "Port ", obj)
+    obj = re.sub(r"^Interface ((?:wan|lan|opt\d+)\b)", lambda m: f"{tr('obj.interface', lang)} {m.group(1)}", obj)
+    obj = re.sub(r'^Firewall > rule ("[^"]*"|\S+)', lambda m: f"{tr('obj.firewall_rule', lang)} {m.group(1)}", obj)
+    obj = re.sub(r"^Firewall alias ", lambda m: f"{tr('obj.firewall_alias', lang)} ", obj)
+    obj = re.sub(r"^User ", lambda m: f"{tr('obj.user', lang)} ", obj)
+    obj = re.sub(r"^Group ", lambda m: f"{tr('obj.group', lang)} ", obj)
+    obj = re.sub(r"^system > ", lambda m: f"{tr('obj.system', lang)} > ", obj)
     obj = re.sub(r"^snmpd\b", "SNMP", obj)
-    return obj.replace(" > destination", " > cieľ").replace(" > source", " > zdroj")
+    return obj.replace(" > destination", f" > {tr('obj.destination', lang)}").replace(" > source", f" > {tr('obj.source', lang)}")
 
 
 def _list(value: str) -> str:
     return ", ".join(part for part in re.split(r"\s*,\s*", value.strip()) if part)
 
 
-def _vlan_details(details: str) -> tuple[str, str]:
+def _vlan_details(details: str, lang: str) -> tuple[str, str]:
     """MikroTik details "bridge bridge1, tagged a,b, comment "x"" -> readable sentence part."""
     items = dict(re.findall(r'(name|bridge|interface|tagged|untagged|comment)\s+("[^"]*"|[^\s,]+(?:,[^\s,]+)*)', details))
     parts = []
     label = items.get("comment") or items.get("name")
-    if items.get("bridge"):
-        parts.append(f"na {items['bridge']}")
-    elif items.get("interface"):
-        parts.append(f"na {items['interface']}")
+    if items.get("bridge") or items.get("interface"):
+        parts.append(tr("where.on", lang, name=items.get("bridge") or items.get("interface")))
     if items.get("tagged"):
-        parts.append(f"tagovaná na portoch {_list(items['tagged'])}")
+        parts.append(tr("where.tagged", lang, ports=_list(items["tagged"])))
     if items.get("untagged"):
-        parts.append(f"netagovaná na portoch {_list(items['untagged'])}")
+        parts.append(tr("where.untagged", lang, ports=_list(items["untagged"])))
     return (f" {label}" if label else ""), ", ".join(parts)
 
 
-def _ports(ports: list[str], singular: str, plural: str) -> str:
-    if len(ports) == 1:
-        return f"Port {ports[0]} {singular}"
-    return f"Porty {', '.join(ports)} {plural}"
+def _paren(text: str) -> str:
+    return f" ({text})" if text else ""
 
 
-def audit_text(change: dict) -> str:
-    """Plain-language (Slovak) description of a change for the security manager, without config lines."""
+def audit_text(change: dict, lang: str = "en") -> str:
+    """Plain-language description of a change for the audit (no configuration lines)."""
     message = change.get("message", "")
+
+    if message == "@new_device":
+        details = ", ".join(
+            part
+            for part in (change.get("model", ""), tr("chg.platform", lang, name=change["platform"]) if change.get("platform") else "")
+            if part
+        )
+        return tr("chg.new_device", lang, model=_paren(details))
 
     # MikroTik bridge VLAN entry
     match = re.match(r"^VLAN (\S+) (added|removed) \((.*)\)$", message)
     if match and re.search(r"\b(bridge|tagged|untagged|interface) ", match.group(3)):
-        label, where = _vlan_details(match.group(3))
-        verb = "bola pridaná" if match.group(2) == "added" else "bola odstránená"
-        return f"VLAN {match.group(1)}{label} {verb}" + (f" ({where})." if where else ".")
+        label, where = _vlan_details(match.group(3), lang)
+        return tr(f"chg.vlan_{match.group(2)}", lang, vlan=match.group(1), label=label, details=_paren(where))
 
     match = re.match(r"^VLAN (.+?)(?: \(interface\))? (added|removed)(?: \((.*)\))?$", message)
     if match:
-        verb = "bola pridaná" if match.group(2) == "added" else "bola odstránená"
-        details = f" ({_details(match.group(3))})" if match.group(3) else ""
-        return f"VLAN {match.group(1)} {verb}{details}."
+        details = _paren(_details(match.group(3), lang)) if match.group(3) else ""
+        return tr(f"chg.vlan_{match.group(2)}", lang, vlan=match.group(1), label="", details=details)
 
     match = re.match(r"^Interface (.+?) (added|removed)(?: \((.*)\))?$", message)
     if match:
-        verb = "bol pridaný" if match.group(2) == "added" else "bol odstránený"
-        details = f" ({_details(match.group(3))})" if match.group(3) else ""
-        return f"{_object_name('Interface ' + match.group(1))} {verb}{details}."
+        details = _paren(_details(match.group(3), lang)) if match.group(3) else ""
+        return tr(f"chg.port_{match.group(2)}", lang, obj=_object_name("Interface " + match.group(1), lang), details=details)
 
     match = re.match(r"^VLAN list changed .*\((.*)\)$", message)
     if match:
         sentences = [
-            f"VLAN {vlans} {'pridaná do databázy VLAN' if action == 'added' else 'odstránená z databázy VLAN'}"
+            tr(f"chg.vlan_db_{action}", lang, vlan=vlans)
             for action, vlans in re.findall(r"(added|removed) ([\d,\-]+)", match.group(1))
         ]
         return "; ".join(sentences) + "."
@@ -230,92 +224,94 @@ def audit_text(change: dict) -> str:
     if match:
         old_ports = {port for port in match.group(3).split(",") if port}
         new_ports = {port for port in match.group(4).split(",") if port}
-        mode = MODE_SK[match.group(2)]
+        mode = tr(f"mode.{match.group(2)}", lang)
         sentences = []
-        if new_ports - old_ports:
-            sentences.append(f"{_ports(sorted(new_ports - old_ports), 'pridaný', 'pridané')} do VLAN {match.group(1)} ({mode})")
-        if old_ports - new_ports:
-            sentences.append(f"{_ports(sorted(old_ports - new_ports), 'odobratý', 'odobraté')} z VLAN {match.group(1)} ({mode})")
+        for ports, key in ((sorted(new_ports - old_ports), "to_vlan"), (sorted(old_ports - new_ports), "from_vlan")):
+            if ports:
+                prefix = "chg.port_" if len(ports) == 1 else "chg.ports_"
+                sentences.append(tr(prefix + key, lang, ports=", ".join(ports), vlan=match.group(1), mode=mode))
         if sentences:
             return "; ".join(sentences) + "."
 
     match = re.match(r"^/user name=(\S+): (.+) changed$", message)
     if match:
-        label = _label(match.group(2))
-        return f"Používateľský účet {match.group(1)}: " + ("zmenené heslo." if label == "heslo" else f"zmena – {label}.")
+        obj = f"{tr('obj.user', lang)} {match.group(1)}"
+        if LABEL_ALIASES.get(match.group(2), match.group(2)) == "password":
+            return tr("chg.password_changed", lang, obj=obj)
+        return tr("chg.item_changed", lang, obj=obj, label=_label(match.group(2), lang))
 
     match = re.match(r"^(.+?): (snmp-server community|snmp-agent community|rocommunity|rwcommunity) changed$", message)
     if match:
-        return "Zmenená SNMP community."
+        return tr("chg.snmp_community", lang)
 
     match = re.match(r'^(/ip firewall \S+|/ipv6 firewall \S+): line (added|removed) "(?:add )?(.*)"$', message)
     if match:
-        verb = "bolo pridané" if match.group(2) == "added" else "bolo odstránené"
-        return f"Pravidlo firewallu {verb} ({match.group(1)}): {match.group(3)}"
+        return tr(f"chg.fw_rule_{match.group(2)}", lang, section=match.group(1), rule=match.group(3))
 
     match = re.match(r"^(.+?): (tagged|untagged|allowed|member) VLANs changed .*\((.*)\)$", message)
     if match:
-        port, mode, delta = _object_name(match.group(1)), MODE_SK[match.group(2)], match.group(3)
-        port_lower = port[0].lower() + port[1:]
+        port = _object_name(match.group(1), lang)
+        mode = tr(f"mode.{match.group(2)}", lang)
         sentences = [
-            f"VLAN {vlans} {'pridaná na' if action == 'added' else 'odobratá z'} {port_lower} ({mode})"
-            for action, vlans in re.findall(r"(added|removed) ([\d,\-]+)", delta)
+            tr(f"chg.vlan_on_port_{action}", lang, vlan=vlans, port=port, mode=mode)
+            for action, vlans in re.findall(r"(added|removed) ([\d,\-]+)", match.group(3))
         ]
         return "; ".join(sentences) + "."
 
     match = re.match(r'^Hostname changed "(.*)" -> "(.*)"$', message)
     if match:
-        return f'Zariadenie premenované z "{match.group(1)}" na "{match.group(2)}".'
+        return tr("chg.renamed", lang, old=match.group(1), new=match.group(2))
 
     match = re.match(r"^(User|Group) (\S+) (added|removed)(?: \((.*)\))?$", message)
     if match:
-        kind = "Používateľský účet" if match.group(1) == "User" else "Skupina používateľov"
-        created = "bol vytvorený" if match.group(1) == "User" else "bola vytvorená"
-        deleted = "bol zmazaný" if match.group(1) == "User" else "bola zmazaná"
-        return f"{kind} {match.group(2)} {created if match.group(3) == 'added' else deleted}."
+        kind = "user" if match.group(1) == "User" else "group"
+        return tr(f"chg.{kind}_{match.group(3)}", lang, name=match.group(2))
 
     match = re.match(r"^User (\S+) changed", message)
     if match:
-        return f"Používateľský účet {match.group(1)} bol upravený (heslo, oprávnenia alebo iné nastavenia)."
+        return tr("chg.user_modified", lang, name=match.group(1))
 
     match = re.match(r'^(.+?): (.+?) changed "(.*)" -> "(.*)"(.*)$', message)
     if match:
-        return f'{_object_name(match.group(1))}: {_label(match.group(2))} – zmena z "{match.group(3)}" na "{match.group(4)}".'
+        return tr(
+            "chg.value_changed", lang,
+            obj=_object_name(match.group(1), lang), label=_label(match.group(2), lang), old=match.group(3), new=match.group(4),
+        )
 
     match = re.match(r"^(.+?): administratively (enabled|disabled)", message)
     if match:
-        state = "administratívne zapnutý" if match.group(2) == "enabled" else "administratívne vypnutý (shutdown)"
-        return f"{_object_name(match.group(1))}: {state}."
+        return tr(f"chg.{match.group(2)}", lang, obj=_object_name(match.group(1), lang))
 
     match = re.match(r'^(.+?): line (added|removed) "(.*)"$', message)
     if match:
-        verb = "Pridaný" if match.group(2) == "added" else "Odstránený"
-        return f"{verb} konfiguračný riadok ({_object_name(match.group(1))}): {match.group(3)}"
+        return tr(f"chg.line_{match.group(2)}", lang, obj=_object_name(match.group(1), lang), line=match.group(3))
 
     match = re.match(r'^(.+?): (.+?) (added|removed) "(.*)"$', message)
     if match:
-        verb = "pridané" if match.group(3) == "added" else "odstránené"
-        return f'{_object_name(match.group(1))}: {_label(match.group(2))} – {verb} "{match.group(4)}".'
+        return tr(
+            f"chg.value_{match.group(3)}", lang,
+            obj=_object_name(match.group(1), lang), label=_label(match.group(2), lang), value=match.group(4),
+        )
 
     match = re.match(r"^(.+?): (.+) changed$", message)
     if match:
-        label = _label(match.group(2))
-        if label == "heslo":
-            return f"{_object_name(match.group(1))}: zmenené heslo."
-        return f"{_object_name(match.group(1))}: zmena – {label}."
+        obj = _object_name(match.group(1), lang)
+        if LABEL_ALIASES.get(match.group(2), match.group(2)) == "password":
+            return tr("chg.password_changed", lang, obj=obj)
+        return tr("chg.item_changed", lang, obj=obj, label=_label(match.group(2), lang))
 
     match = re.match(r'^Firewall > rule ("[^"]*"|\S+) (added|removed)(?: \((.*)\))?$', message)
     if match:
-        verb = "bolo pridané" if match.group(2) == "added" else "bolo odstránené"
         details = re.sub(r",?\s*description [^,]*$", "", match.group(3) or "")
-        return f"Pravidlo firewallu {match.group(1)} {verb}" + (f" ({_details(details)})." if details else ".")
+        return tr(
+            f"chg.rule_{match.group(2)}", lang,
+            obj=tr("obj.firewall_rule", lang), rule=match.group(1), details=_paren(_details(details, lang)) if details else "",
+        )
 
     match = re.match(r"^(.+?) (added|removed)(?: \((.*)\))?$", message)
     if match:
-        verb = "Pridaná časť konfigurácie" if match.group(2) == "added" else "Odstránená časť konfigurácie"
-        details = match.group(3) or ""
-        details = re.sub(r",?\s*description [^,]*$", "", details) if match.group(1).startswith("Firewall > rule") else details
-        return f"{verb}: {_object_name(match.group(1))}" + (f" ({_details(details)})." if details else ".")
+        details = _paren(_details(match.group(3), lang)) if match.group(3) else ""
+        return tr(f"chg.section_{match.group(2)}", lang, obj=_object_name(match.group(1), lang), details=details)
 
     return message
 
@@ -355,6 +351,7 @@ def severity_of(settings, category: str) -> str:
 
 def annotate(settings, changes: list[Change]) -> list[dict]:
     """Return changes as dictionaries with audit category and severity."""
+    lang = language_of(settings)
     rows = []
     for change in changes:
         category = classify(change)
@@ -364,9 +361,9 @@ def annotate(settings, changes: list[Change]) -> list[dict]:
                 "action": change.action,
                 "type": change.category,
                 "category": category,
-                "category_label": AUDIT_CATEGORY_LABEL[category],
+                "category_label": category_label(category, lang),
                 "severity": severity,
-                "severity_label": SEVERITY_LABEL[severity],
+                "severity_label": severity_label(severity, lang),
                 "object": change.obj,
                 "message": mask_secrets(change.message),
                 "old": mask_secrets(change.old),
@@ -439,7 +436,8 @@ def _report_from_entries(settings, entries: list[dict], since: datetime, until: 
     minimum = SEVERITY_RANK.get(getattr(settings, "audit_min_severity", "low") or "low", 0)
     severities = severity_map(settings)
     devices: dict[str, dict] = {}
-    counts = {key: 0 for key, _ in SEVERITIES}
+    lang = language_of(settings)
+    counts = {key: 0 for key in SEVERITY_KEYS}
     skipped = 0
 
     for entry in entries:
@@ -463,8 +461,8 @@ def _report_from_entries(settings, entries: list[dict], since: datetime, until: 
                     "author": entry.get("author") or "",
                     "when": entry["when"],
                     "severity": severity,
-                    "severity_label": SEVERITY_LABEL[severity],
-                    "category_label": AUDIT_CATEGORY_LABEL.get(category, category),
+                    "severity_label": severity_label(severity, lang),
+                    "category_label": category_label(category, lang),
                 }
             )
 
@@ -518,58 +516,68 @@ def _format_time(value: datetime, settings) -> str:
 SEVERITY_COLOR = {"low": "#6c757d", "medium": "#d39e00", "high": "#fd7e14", "critical": "#dc3545"}
 
 
+def severity_summary(report: dict, lang: str) -> str:
+    counts = report["counts"]
+    return ", ".join(
+        f"{tr(f'severity_plural.{key}', lang)}: {counts[key]}" for key in reversed(SEVERITY_KEYS) if counts[key]
+    )
+
+
+def report_period(settings, report: dict) -> str:
+    if report.get("period_label"):
+        return report["period_label"]
+    return f"{_format_time(report['since'], settings)} - {_format_time(report['until'], settings)}"
+
+
+def report_subject(settings, report: dict) -> str:
+    lang = language_of(settings)
+    summary = severity_summary(report, lang)
+    return tr("report.subject", lang, devices=len(report["devices"]), total=report["total"]) + (f" ({summary})" if summary else "")
+
+
 def render_report(settings, report: dict) -> tuple[str, str, str]:
     """Return (subject, plain text, HTML) of the audit e-mail."""
+    lang = language_of(settings)
     fields = [field for field in (getattr(settings, "audit_fields", None) or DEFAULT_AUDIT_FIELDS)]
-    labels = dict(AUDIT_FIELDS)
-    if report.get("period_label"):
-        period = report["period_label"]
-    else:
-        period = f"{_format_time(report['since'], settings)} - {_format_time(report['until'], settings)}"
-    counts = report["counts"]
-    summary = ", ".join(f"{SEVERITY_PLURAL[key]}: {counts[key]}" for key, _label in reversed(SEVERITIES) if counts[key])
-
-    subject = (
-        f"[LibreOXI] Audit zmien konfigurácie – zariadenia: {len(report['devices'])}, "
-        f"zmeny: {report['total']}" + (f" ({summary})" if summary else "")
-    )
+    labels = dict(audit_fields(lang))
+    period = report_period(settings, report)
+    summary = severity_summary(report, lang)
+    subject = report_subject(settings, report)
 
     def cell(change, field):
         if field == "time":
             return _format_time(change["when"], settings)
-        if field == "ip":
-            return device_ip
         if field == "severity":
             return change["severity_label"]
         if field == "category":
             return change["category_label"]
         if field == "change":
-            return audit_text(change)
+            return audit_text(change, lang)
         return change.get(field, "")
 
-    text = ["Audit zmien konfigurácie sieťových zariadení (LibreOXI)", f"Obdobie: {period}", ""]
+    title = tr("report.title", lang)
+    text = [f"{title} (LibreOXI)", tr("report.period", lang, period=period), ""]
     html = [
         '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#212529">',
-        "<h2 style=\"margin:0 0 4px\">Audit zmien konfigurácie sieťových zariadení</h2>",
-        f"<p style=\"margin:0 0 16px;color:#6c757d\">Obdobie: {escape(period)}</p>",
+        f"<h2 style=\"margin:0 0 4px\">{escape(title)}</h2>",
+        f"<p style=\"margin:0 0 16px;color:#6c757d\">{escape(tr('report.period', lang, period=period))}</p>",
     ]
     if not report["devices"]:
-        text.append("Neboli zistené žiadne zmeny zodpovedajúce nastaveniam auditu.")
-        html.append("<p>Neboli zistené žiadne zmeny zodpovedajúce nastaveniam auditu.</p>")
+        text.append(tr("report.no_changes", lang))
+        html.append(f"<p>{escape(tr('report.no_changes', lang))}</p>")
     else:
-        text.append(f"Počet zmien: {report['total']}" + (f" ({summary})" if summary else ""))
-        text.append("")
-        html.append(f"<p><strong>Počet zmien:</strong> {report['total']}" + (f" ({escape(summary)})" if summary else "") + "</p>")
+        changes_line = tr("report.changes", lang, total=report["total"]) + (f" ({summary})" if summary else "")
+        text.extend([changes_line, ""])
+        html.append(f"<p><strong>{escape(changes_line)}</strong></p>")
 
+    columns = [field for field in fields if field != "ip"]
     for device in report["devices"]:
-        device_ip = device["ip"]
-        title = device["name"] + (f" ({device_ip})" if device_ip and "ip" in fields else "")
-        text.append(f"== {title} ==")
-        html.append(f"<h3 style=\"margin:20px 0 6px\">{escape(title)}</h3>")
+        device_title = device["name"] + (f" ({device['ip']})" if device["ip"] and "ip" in fields else "")
+        text.append(f"== {device_title} ==")
+        html.append(f"<h3 style=\"margin:20px 0 6px\">{escape(device_title)}</h3>")
         for author in device.get("authors", []):
-            text.append(f"Zmenu uložil: {author}")
-            html.append(f"<p style=\"margin:0 0 6px;color:#495057\">Zmenu uložil: {escape(author)}</p>")
-        columns = [field for field in fields if field != "ip"]
+            text.append(tr("report.saved_by", lang, author=author))
+            html.append(f"<p style=\"margin:0 0 6px;color:#495057\">{escape(tr('report.saved_by', lang, author=author))}</p>")
         html.append('<table style="border-collapse:collapse;width:100%" cellpadding="6">')
         html.append(
             "<tr>"
@@ -609,27 +617,6 @@ def render_report(settings, report: dict) -> tuple[str, str, str]:
 def recipients(settings) -> list[str]:
     raw = getattr(settings, "audit_email_recipients", "") or ""
     return [address.strip() for address in re.split(r"[,;\s]+", raw) if address.strip()]
-
-
-FREQUENCIES = (
-    ("daily", "Denne – za predchádzajúci deň"),
-    ("weekly", "Týždenne – za posledných 7 dní"),
-    ("monthly", "Mesačne – za predchádzajúci mesiac (1. deň v mesiaci)"),
-)
-WEEKDAYS = (
-    (0, "Pondelok"),
-    (1, "Utorok"),
-    (2, "Streda"),
-    (3, "Štvrtok"),
-    (4, "Piatok"),
-    (5, "Sobota"),
-    (6, "Nedeľa"),
-)
-SMTP_SECURITY = (
-    ("none", "Disabled (zvyčajne port 25)"),
-    ("ssl", "SSL (zvyčajne port 465)"),
-    ("starttls", "TLS / STARTTLS (zvyčajne port 587)"),
-)
 
 
 def from_address(settings) -> str:
@@ -693,51 +680,76 @@ def send_test_email(settings, to: list[str] | None = None) -> None:
     from django.core.mail import EmailMessage
     from django.utils import timezone
 
+    lang = language_of(settings)
     to = to or recipients(settings)
     if not to:
-        raise ValueError("Nie sú nastavení príjemcovia auditného e-mailu.")
+        raise ValueError(tr("mail.no_recipients", lang))
     now = timezone.localtime().strftime(getattr(settings, "datetime_format", "%d.%m.%Y %H:%M:%S"))
-    body = (
-        "Toto je testovací e-mail z pluginu NetBox LibreOXI.\n"
-        "This is a test e-mail from the NetBox LibreOXI plugin.\n\n"
-        f"Odoslané / Sent: {now}\n"
-        f"SMTP server: {(getattr(settings, 'smtp_host', '') or '').strip() or 'nastavenie NetBoxu (EMAIL)'}\n"
-        f"Príjemcovia / Recipients: {', '.join(to)}\n\n"
-        "Ak ste tento e-mail dostali, odosielanie auditu zmien konfigurácie je nastavené správne.\n"
-        "If you received this e-mail, the configuration change audit e-mail is set up correctly."
-    )
-    message = EmailMessage(
-        subject="[LibreOXI] Testovací e-mail / Test e-mail", body=body, from_email=from_address(settings), to=to
-    )
+    server = (getattr(settings, "smtp_host", "") or "").strip() or tr("mail.netbox_settings", lang)
+    body = tr("mail.test_body", lang, time=now, server=server, recipients=", ".join(to))
+    message = EmailMessage(subject=tr("mail.test_subject", lang), body=body, from_email=from_address(settings), to=to)
     _deliver(settings, message)
 
 
-def send_audit(settings, devices, since, until, label: str, force: bool = False, to: list[str] | None = None) -> dict:
-    """Build the audit for the period and e-mail it. Returns {"sent", "total", "reason"}."""
-    from django.core.mail import EmailMultiAlternatives
+def build_audit(settings, devices, since, until, label: str) -> dict:
     from django.utils import timezone
 
-    to = to or recipients(settings)
-    if not to:
-        return {"sent": False, "total": 0, "reason": "Nie sú nastavení príjemcovia auditného e-mailu."}
     entries = collect_entries(settings, devices, since, until)
     report = _report_from_entries(
         settings, entries, since or datetime(1970, 1, 1, tzinfo=dt_timezone.utc), until or timezone.now()
     )
     report["period_label"] = label
-    if not report["total"] and not force and not getattr(settings, "audit_send_empty", False):
-        return {"sent": False, "total": 0, "reason": "Žiadne zmeny na odoslanie."}
+    return report
 
+
+def html_document(settings, report: dict) -> str:
+    subject, _text, html = render_report(settings, report)
+    return (
+        f'<!doctype html><html lang="{language_of(settings)}"><head><meta charset="utf-8">'
+        f"<title>{escape(subject)}</title></head><body style=\"background:#fff;margin:24px\">{html}</body></html>"
+    )
+
+
+def send_audit(
+    settings, devices, since, until, label: str, force: bool = False, to: list[str] | None = None,
+    attachments: list[str] | None = None,
+) -> dict:
+    """Build the audit for the period and e-mail it. Returns {"sent", "total", "reason"}.
+
+    attachments: list of "pdf", "csv", "html"; None = use the saved e-mail settings.
+    """
+    from django.core.mail import EmailMultiAlternatives
+    from django.utils import timezone
+
+    lang = language_of(settings)
+    to = to or recipients(settings)
+    if not to:
+        return {"sent": False, "total": 0, "reason": tr("mail.no_recipients", lang)}
+    report = build_audit(settings, devices, since, until, label)
+    if not report["total"] and not force and not getattr(settings, "audit_send_empty", False):
+        return {"sent": False, "total": 0, "reason": tr("mail.no_changes", lang)}
+
+    if attachments is None:
+        attachments = [
+            kind
+            for kind, enabled in (
+                ("pdf", getattr(settings, "audit_email_attach_pdf", True)),
+                ("csv", getattr(settings, "audit_email_attach_csv", False)),
+            )
+            if enabled
+        ]
     subject, text, html = render_report(settings, report)
     message = EmailMultiAlternatives(subject=subject, body=text, from_email=from_address(settings), to=to)
     message.attach_alternative(html, "text/html")
     stamp = timezone.localtime().strftime("%Y-%m-%d")
-    if getattr(settings, "audit_email_attach_pdf", True):
+    if "pdf" in attachments:
         from .audit_pdf import build_pdf
 
         message.attach(f"libreoxi-audit_{stamp}.pdf", build_pdf(settings, report, subject), "application/pdf")
-    if getattr(settings, "audit_email_attach_csv", False):
+    if "csv" in attachments:
         message.attach(f"libreoxi-audit_{stamp}.csv", report_csv(settings, report).encode("utf-8"), "text/csv")
+    if "html" in attachments:
+        message.attach(f"libreoxi-audit_{stamp}.html", html_document(settings, report).encode("utf-8"), "text/html")
     _deliver(settings, message)
     return {"sent": True, "total": report["total"], "reason": ""}
 
@@ -780,16 +792,16 @@ def scheduled_period(settings, now: datetime):
             return None
         since = timezone.make_aware(datetime.combine((today - timedelta(days=7)).date(), datetime.min.time()))
         last_day = (today - timedelta(days=1)).date()
-        return slot, since, today, f"Týždeň {since.strftime(date_format)} – {last_day.strftime(date_format)}"
+        return slot, since, today, tr("period.week", language_of(settings), start=since.strftime(date_format), end=last_day.strftime(date_format))
     if frequency == "monthly":
         if local_now.day != 1:
             return None
         previous = (today - timedelta(days=1)).date().replace(day=1)
         since = timezone.make_aware(datetime.combine(previous, datetime.min.time()))
-        return slot, since, today, f"Mesiac {previous.strftime('%m/%Y')}"
+        return slot, since, today, tr("period.month", language_of(settings), month=previous.strftime("%m/%Y"))
     yesterday = (today - timedelta(days=1)).date()
     since = timezone.make_aware(datetime.combine(yesterday, datetime.min.time()))
-    return slot, since, today, f"Včera ({yesterday.strftime(date_format)})"
+    return slot, since, today, tr("period.yesterday", language_of(settings), day=yesterday.strftime(date_format))
 
 
 # --------------------------------------------------------------------------
@@ -826,7 +838,7 @@ def collect_entries(settings, devices, since: datetime | None, until: datetime |
         ip = str(device.primary_ip4.address.ip) if getattr(device, "primary_ip4", None) else ""
         first_seen = _first_seen(settings, device, revisions)
         if first_seen is not None and (since is None or first_seen >= since) and (until is None or first_seen < until):
-            model = _device_model(device)
+            model, platform = _device_model(device)
             entries.append(
                 {
                     "device": str(device),
@@ -838,8 +850,9 @@ def collect_entries(settings, devices, since: datetime | None, until: datetime |
                             "category": "inventory",
                             "action": "added",
                             "object": str(device),
-                            "message": "Zariadenie bolo zaradené do monitorovania zmien konfigurácie (change management), "
-                            "uložená prvá záloha konfigurácie" + (f" ({model})." if model else "."),
+                            "message": "@new_device",
+                            "model": model,
+                            "platform": platform,
                             "old": "",
                             "new": "",
                         }
@@ -882,16 +895,14 @@ def collect_entries(settings, devices, since: datetime | None, until: datetime |
     return entries
 
 
-def _device_model(device) -> str:
-    parts = []
+def _device_model(device) -> tuple[str, str]:
+    model = ""
     device_type = getattr(device, "device_type", None)
     if device_type is not None:
         manufacturer = getattr(device_type, "manufacturer", None)
-        parts.append(" ".join(str(part) for part in (manufacturer, getattr(device_type, "model", "")) if part))
+        model = " ".join(str(part) for part in (manufacturer, getattr(device_type, "model", "")) if part)
     platform = getattr(device, "platform", None)
-    if platform:
-        parts.append(f"platforma {platform}")
-    return ", ".join(part for part in parts if part)
+    return model, str(platform) if platform else ""
 
 
 def _first_seen(settings, device, revisions) -> datetime | None:
@@ -925,7 +936,8 @@ def report_csv(settings, report: dict) -> str:
 
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";")
-    writer.writerow(["Zariadenie", "IP", "Čas", "Závažnosť", "Kategória", "Zmena", "Zmenu uložil"])
+    lang = language_of(settings)
+    writer.writerow([tr(f"field.{key}", lang) for key in ("device", "ip", "time", "severity", "category", "change", "saved_by")])
     for device in report["devices"]:
         for change in device["changes"]:
             writer.writerow(
@@ -935,7 +947,7 @@ def report_csv(settings, report: dict) -> str:
                     _format_time(change["when"], settings),
                     change["severity_label"],
                     change["category_label"],
-                    audit_text(change),
+                    audit_text(change, lang),
                     change.get("author", ""),
                 ]
             )

@@ -47,6 +47,7 @@ class LibreOXISettings(models.Model):
     smtp_timeout = models.PositiveIntegerField(default=10)
     smtp_auto_tls = models.BooleanField(default=False)
     smtp_auth = models.BooleanField(default=False)
+    language = models.CharField(max_length=8, default="en")
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

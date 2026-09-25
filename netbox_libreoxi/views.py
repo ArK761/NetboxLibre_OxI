@@ -16,6 +16,7 @@ from utilities.views import ViewTab, register_model_view
 from . import audit
 from .config_changes import compare as compare_changes, config_author, summary as change_summary
 from .forms import LibreOXIEmailForm, LibreOXISettingsForm
+from .i18n import language_of, tr
 from .models import LibreOXISettings
 from .oxi import fetch_device, monitored_devices
 from .storage import device_dir, list_history, read_current
@@ -263,7 +264,7 @@ def compare_config(request, pk):
         author=config_author(new_content),
     )
     audit_subject, _audit_text, audit_html = audit.render_report(settings, audit_report)
-    return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff), "full_diff_html": mark_safe(full_diff), "old_display": fromdesc, "new_display": todesc, "changes": audit.annotate(settings, changes), "change_counts": change_summary(changes), "audit_report": audit_report, "audit_subject": audit_subject, "audit_html": mark_safe(audit_html), "audit_min_severity": audit.SEVERITY_LABEL.get(settings.audit_min_severity, settings.audit_min_severity)})
+    return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff), "full_diff_html": mark_safe(full_diff), "old_display": fromdesc, "new_display": todesc, "changes": audit.annotate(settings, changes), "change_counts": change_summary(changes), "audit_report": audit_report, "audit_subject": audit_subject, "audit_html": mark_safe(audit_html), "audit_min_severity": audit.severity_label(settings.audit_min_severity, language_of(settings)), "lang": language_of(settings)})
 
 
 def delete_revision(request, pk):
@@ -320,7 +321,7 @@ def settings_view(request):
             form.save(); messages.success(request, "LibreOXI settings saved. New storage path is used immediately by device views and refresh jobs.")
             return redirect("plugins:netbox_libreoxi:settings")
     else: form = LibreOXISettingsForm(instance=instance)
-    return render(request, "netbox_libreoxi/settings.html", {"form": form})
+    return render(request, "netbox_libreoxi/settings.html", {"form": form, "lang": language_of(instance)})
 
 
 def _audit_period(request, settings):
@@ -340,25 +341,26 @@ def _audit_period(request, settings):
             return None
 
     date_format = settings.datetime_format.split(" ")[0] if settings.datetime_format else "%d.%m.%Y"
+    lang = language_of(settings)
     today = now.date()
     if period == "yesterday":
         day = today - timedelta(days=1)
-        return local_midnight(day), local_midnight(today), f"Včera ({day.strftime(date_format)})"
+        return local_midnight(day), local_midnight(today), tr("period.yesterday", lang, day=day.strftime(date_format))
     if period == "day":
         day = parse_day(request.GET.get("day")) or today
-        return local_midnight(day), local_midnight(day + timedelta(days=1)), f"Deň {day.strftime(date_format)}"
+        return local_midnight(day), local_midnight(day + timedelta(days=1)), tr("period.day", lang, day=day.strftime(date_format))
     if period == "range":
         start = parse_day(request.GET.get("from")) or today
         end = parse_day(request.GET.get("to")) or today
         if end < start:
             start, end = end, start
-        return local_midnight(start), local_midnight(end + timedelta(days=1)), f"{start.strftime(date_format)} – {end.strftime(date_format)}"
+        return local_midnight(start), local_midnight(end + timedelta(days=1)), tr("period.range", lang, start=start.strftime(date_format), end=end.strftime(date_format))
     if period == "last7":
         start = today - timedelta(days=6)
-        return local_midnight(start), local_midnight(today + timedelta(days=1)), f"Posledných 7 dní ({start.strftime(date_format)} – {today.strftime(date_format)})"
+        return local_midnight(start), local_midnight(today + timedelta(days=1)), tr("period.last7", lang, start=start.strftime(date_format), end=today.strftime(date_format))
     if period == "all":
-        return None, None, "Celá uložená história"
-    return local_midnight(today), local_midnight(today + timedelta(days=1)), f"Dnes ({today.strftime(date_format)})"
+        return None, None, tr("period.all", lang)
+    return local_midnight(today), local_midnight(today + timedelta(days=1)), tr("period.today", lang, day=today.strftime(date_format))
 
 
 def audit_view(request):
@@ -373,15 +375,17 @@ def audit_view(request):
     if selected_ids:
         devices = [device for device in devices if device.pk in selected_ids]
     since, until, label = _audit_period(request, settings)
+    lang = language_of(settings)
     if request.method == "POST" and request.POST.get("action") == "send_email":
+        attachments = [kind for kind in request.POST.getlist("attach") if kind in ("pdf", "csv", "html")]
         try:
-            result = audit.send_audit(settings, devices, since, until, label, force=True)
+            result = audit.send_audit(settings, devices, since, until, label, force=True, attachments=attachments)
             if result["sent"]:
-                messages.success(request, f"Audit ({label}) bol odoslaný na: {', '.join(audit.recipients(settings))}.")
+                messages.success(request, tr("ui.audit_sent", lang, period=label, recipients=", ".join(audit.recipients(settings))))
             else:
                 messages.warning(request, result["reason"])
         except Exception as exc:
-            messages.error(request, f"Audit sa nepodarilo odoslať: {exc}")
+            messages.error(request, tr("ui.audit_send_failed", lang, error=exc))
         return redirect(f"{request.path}?{request.GET.urlencode()}")
     context = {
         "settings": settings,
@@ -394,16 +398,15 @@ def audit_view(request):
         "period_label": label,
         "generated": "generate" in request.GET or "export" in request.GET,
         "recipients": ", ".join(audit.recipients(settings)),
-        "min_severity": audit.SEVERITY_LABEL.get(settings.audit_min_severity, settings.audit_min_severity),
+        "lang": lang,
+        "default_attach_pdf": settings.audit_email_attach_pdf,
+        "default_attach_csv": settings.audit_email_attach_csv,
+        "min_severity": audit.severity_label(settings.audit_min_severity, lang),
     }
     if not context["generated"]:
         return render(request, "netbox_libreoxi/audit.html", context)
 
-    entries = audit.collect_entries(settings, devices, since, until)
-    report = audit._report_from_entries(
-        settings, entries, since or datetime.min.replace(tzinfo=timezone.utc), until or django_timezone.now()
-    )
-    report["period_label"] = label
+    report = audit.build_audit(settings, devices, since, until, label)
     subject, _text, html = audit.render_report(settings, report)
 
     export = request.GET.get("export")
@@ -419,11 +422,7 @@ def audit_view(request):
         response["Content-Disposition"] = f'attachment; filename="libreoxi-audit_{stamp}.pdf"'
         return response
     if export == "html":
-        page = (
-            '<!doctype html><html lang="sk"><head><meta charset="utf-8">'
-            f"<title>{subject}</title></head><body style=\"background:#fff;margin:24px\">{html}</body></html>"
-        )
-        response = HttpResponse(page, content_type="text/html; charset=utf-8")
+        response = HttpResponse(audit.html_document(settings, report), content_type="text/html; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="libreoxi-audit_{stamp}.html"'
         return response
 
@@ -436,22 +435,23 @@ def email_view(request):
         return redirect(f"{reverse('login')}?next={request.path}")
     instance = LibreOXISettings.objects.first()
     if instance is None:
-        messages.warning(request, "Najprv uložte LibreOXI Settings.")
+        messages.warning(request, tr("ui.save_settings_first", "en"))
         return redirect("plugins:netbox_libreoxi:settings")
 
+    lang = language_of(instance)
     if request.method == "POST" and request.POST.get("action") == "test_email":
         try:
             audit.send_test_email(instance)
-            messages.success(request, f"Testovací e-mail bol odoslaný na: {', '.join(audit.recipients(instance))}.")
+            messages.success(request, tr("ui.test_sent", lang, recipients=", ".join(audit.recipients(instance))))
         except Exception as exc:
-            messages.error(request, f"Testovací e-mail sa nepodarilo odoslať: {exc}")
+            messages.error(request, tr("ui.test_failed", lang, error=exc))
         return redirect("plugins:netbox_libreoxi:email")
 
     if request.method == "POST":
         form = LibreOXIEmailForm(request.POST, instance=instance)
         if form.is_valid():
             form.save()
-            messages.success(request, "Nastavenie e-mailu bolo uložené.")
+            messages.success(request, tr("ui.email_saved", lang))
             return redirect("plugins:netbox_libreoxi:email")
     else:
         form = LibreOXIEmailForm(instance=instance)
@@ -464,6 +464,7 @@ def email_view(request):
             "recipients": ", ".join(audit.recipients(instance)),
             "last_sent": format_timestamp(last_sent.isoformat(), instance) if last_sent else "",
             "password_set": bool(instance.smtp_password),
+            "lang": lang,
         },
     )
 

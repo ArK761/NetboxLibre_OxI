@@ -3,13 +3,14 @@
 {% block title %}LibreOXI E-mail{% endblock %}
 
 {% block content %}
+{% load libreoxi_tags %}
 <div class="row">
   <div class="col-12 col-xl-8">
     <form method="post" id="libreoxi-email-form">
       {% csrf_token %}
 
       <div class="card mb-3">
-        <div class="card-header"><h5 class="card-title mb-0">Email Options</h5></div>
+        <div class="card-header"><h5 class="card-title mb-0">{{ "ui.email_options"|tr:lang }}</h5></div>
         <div class="card-body">
           {% for field in form %}
             {% if field.name|slice:":5" == "smtp_" %}
@@ -17,13 +18,13 @@
             {% endif %}
           {% endfor %}
           {% if password_set %}
-            <div class="form-text libreoxi-auth">Heslo je uložené.</div>
+            <div class="form-text libreoxi-auth">{{ "ui.password_saved"|tr:lang }}</div>
           {% endif %}
         </div>
       </div>
 
       <div class="card mb-3">
-        <div class="card-header"><h5 class="card-title mb-0">Odosielanie auditu</h5></div>
+        <div class="card-header"><h5 class="card-title mb-0">{{ "ui.audit_sending"|tr:lang }}</h5></div>
         <div class="card-body">
           {% for field in form %}
             {% if field.name|slice:":5" != "smtp_" %}
@@ -31,12 +32,12 @@
             {% endif %}
           {% endfor %}
           {% if last_sent %}
-            <div class="form-text">Posledné automatické odoslanie: {{ last_sent }}</div>
+            <div class="form-text">{% trf "ui.last_sent" lang time=last_sent %}</div>
           {% endif %}
         </div>
       </div>
 
-      <button type="submit" class="btn btn-primary">Uložiť</button>
+      <button type="submit" class="btn btn-primary">{{ "ui.save"|tr:lang }}</button>
     </form>
 
     <div class="card mt-3">
@@ -44,13 +45,13 @@
         <form method="post" class="mb-0">
           {% csrf_token %}
           <button type="submit" name="action" value="test_email" class="btn btn-outline-primary"
-                  {% if not recipients %}disabled{% endif %}>Poslať testovací e-mail</button>
+                  {% if not recipients %}disabled{% endif %}>{{ "ui.send_test"|tr:lang }}</button>
         </form>
         <div class="text-muted small">
           {% if recipients %}
-            Pošle sa na: {{ recipients }} (použije sa uložené nastavenie).
+            {% trf "ui.test_to" lang recipients=recipients %}
           {% else %}
-            Najprv zadajte a uložte príjemcov auditu.
+            {{ "ui.test_need_recipients"|tr:lang }}
           {% endif %}
         </div>
       </div>

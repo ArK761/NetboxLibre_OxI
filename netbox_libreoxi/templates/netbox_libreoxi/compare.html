@@ -1,4 +1,5 @@
 {% extends 'generic/object.html' %}
+{% load libreoxi_tags %}
 
 {% block content %}
   <div class="card">
@@ -84,18 +85,18 @@
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
           <div>
-            <strong>Náhľad auditu &mdash; čo sa odošle manažérovi kybernetickej bezpečnosti</strong>
+            <strong>{{ "ui.preview_title"|tr:lang }}</strong>
             <div class="small text-muted">
-              Minimálna závažnosť: {{ audit_min_severity }}.
-              {% if audit_report.skipped %}Zmeny pod minimálnou závažnosťou (počet: {{ audit_report.skipped }}) sa do auditu nezahrnú.{% endif %}
-              Závažnosti a polia sa nastavujú v LibreOXI Settings.
+              {% trf "ui.preview_help" lang severity=audit_min_severity %}
+              {% if audit_report.skipped %}{% trf "ui.preview_skipped" lang count=audit_report.skipped %}{% endif %}
+              {{ "ui.preview_settings"|tr:lang }}
             </div>
           </div>
-          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#libreoxi-audit-preview">Zobraziť / skryť</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#libreoxi-audit-preview">{{ "ui.show_hide"|tr:lang }}</button>
         </div>
         <div class="collapse show" id="libreoxi-audit-preview">
           <div class="card-body">
-            <div class="mb-2"><strong>Predmet:</strong> <code>{{ audit_subject }}</code></div>
+            <div class="mb-2"><strong>{{ "ui.subject"|tr:lang }}:</strong> <code>{{ audit_subject }}</code></div>
             <div class="libreoxi-audit-mail">{{ audit_html }}</div>
           </div>
         </div>

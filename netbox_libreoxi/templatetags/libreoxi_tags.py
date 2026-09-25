@@ -49,3 +49,19 @@ def log_hash(value):
         return ""
     match = re.search(r"\bhash=([0-9a-fA-F]{64})\b", str(value))
     return match.group(1) if match else ""
+
+
+@register.filter(name="tr")
+def translate(key, lang):
+    """{{ "ui.generate"|tr:lang }}"""
+    from ..i18n import tr
+
+    return tr(key, lang or "en")
+
+
+@register.simple_tag
+def trf(key, lang, **values):
+    """{% trf "ui.changes_count" lang total=report.total %}"""
+    from ..i18n import tr
+
+    return tr(key, lang or "en", **values)

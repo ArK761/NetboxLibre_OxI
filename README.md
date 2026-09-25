@@ -128,8 +128,13 @@ The audit can also be downloaded as **PDF** and sent by e-mail from the Audit pa
 The e-mail is sent by the NetBox background worker (`netbox-rq`); results are written to the LibreOXI log.
 PDF generation uses `reportlab` (installed automatically) and the bundled DejaVu Sans font (see `fonts/LICENSE-DejaVu.txt`).
 
-The audit report is written in Slovak and describes changes in plain language, e.g.
-`VLAN 201 "## TEST ##" bola pridaná (na bridge1, tagovaná na portoch sfp-sfpplus2, sfp-sfpplus1).`
+**Language:** LibreOXI Settings → *Language* selects English (default), Slovak, Czech or German for the audit
+(e-mail, PDF, CSV, preview) and for the Audit and E-mail pages.
+
+When sending an audit from the Audit page, a dialog asks which attachments (PDF, CSV, HTML or none) to include.
+
+The audit describes changes in plain language, e.g.
+`VLAN 201 "## TEST ##" was added (on bridge1, tagged on ports sfp-sfpplus2, sfp-sfpplus1).`
 
 Severities, the minimum severity reported to the security manager and the fields included in the
 report are configured in LibreOXI Settings. The compare page shows an **Audit preview** of exactly

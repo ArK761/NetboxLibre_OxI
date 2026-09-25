@@ -1,47 +1,45 @@
 {% extends 'base/layout.html' %}
+{% load libreoxi_tags %}
 
 {% block title %}LibreOXI Audit{% endblock %}
 
 {% block content %}
 {% if not settings %}
-  <div class="alert alert-warning">LibreOXI nie je nastavený. Najprv vyplňte LibreOXI Settings.</div>
+  <div class="alert alert-warning">{{ "ui.not_configured"|tr:"en" }}</div>
 {% else %}
 <div class="card mb-3">
   <div class="card-header">
-    <strong>Audit zmien konfigurácie</strong>
-    <div class="small text-muted">
-      Audit sa vytvorí z uložených záloh všetkých sledovaných zariadení (porovnaním po sebe idúcich záloh).
-      Minimálna závažnosť: {{ min_severity }} (nastavuje sa v LibreOXI Settings).
-    </div>
+    <strong>{{ "ui.audit_title"|tr:lang }}</strong>
+    <div class="small text-muted">{% trf "ui.audit_help" lang severity=min_severity %}</div>
   </div>
   <div class="card-body">
     <form method="get" id="libreoxi-audit-form">
       <div class="row g-3 align-items-end">
         <div class="col-12 col-md-3">
-          <label class="form-label" for="libreoxi-period">Obdobie</label>
+          <label class="form-label" for="libreoxi-period">{{ "ui.period"|tr:lang }}</label>
           <select class="form-select" name="period" id="libreoxi-period">
-            <option value="today" {% if period == "today" %}selected{% endif %}>Dnes</option>
-            <option value="yesterday" {% if period == "yesterday" %}selected{% endif %}>Včera</option>
-            <option value="last7" {% if period == "last7" %}selected{% endif %}>Posledných 7 dní</option>
-            <option value="day" {% if period == "day" %}selected{% endif %}>Konkrétny deň</option>
-            <option value="range" {% if period == "range" %}selected{% endif %}>Od – do</option>
-            <option value="all" {% if period == "all" %}selected{% endif %}>Kompletne (celá história)</option>
+            <option value="today" {% if period == "today" %}selected{% endif %}>{{ "ui.today"|tr:lang }}</option>
+            <option value="yesterday" {% if period == "yesterday" %}selected{% endif %}>{{ "ui.yesterday"|tr:lang }}</option>
+            <option value="last7" {% if period == "last7" %}selected{% endif %}>{{ "ui.last7"|tr:lang }}</option>
+            <option value="day" {% if period == "day" %}selected{% endif %}>{{ "ui.day"|tr:lang }}</option>
+            <option value="range" {% if period == "range" %}selected{% endif %}>{{ "ui.range"|tr:lang }}</option>
+            <option value="all" {% if period == "all" %}selected{% endif %}>{{ "ui.all"|tr:lang }}</option>
           </select>
         </div>
         <div class="col-12 col-md-2 libreoxi-period-day">
-          <label class="form-label" for="libreoxi-day">Deň</label>
+          <label class="form-label" for="libreoxi-day">{{ "ui.day_label"|tr:lang }}</label>
           <input class="form-control" type="date" name="day" id="libreoxi-day" value="{{ day }}">
         </div>
         <div class="col-6 col-md-2 libreoxi-period-range">
-          <label class="form-label" for="libreoxi-from">Od</label>
+          <label class="form-label" for="libreoxi-from">{{ "ui.from"|tr:lang }}</label>
           <input class="form-control" type="date" name="from" id="libreoxi-from" value="{{ date_from }}">
         </div>
         <div class="col-6 col-md-2 libreoxi-period-range">
-          <label class="form-label" for="libreoxi-to">Do</label>
+          <label class="form-label" for="libreoxi-to">{{ "ui.to"|tr:lang }}</label>
           <input class="form-control" type="date" name="to" id="libreoxi-to" value="{{ date_to }}">
         </div>
         <div class="col-12 col-md-3">
-          <label class="form-label" for="libreoxi-devices">Zariadenia <span class="text-muted small">(prázdne = všetky)</span></label>
+          <label class="form-label" for="libreoxi-devices">{{ "ui.devices"|tr:lang }} <span class="text-muted small">{{ "ui.devices_hint"|tr:lang }}</span></label>
           <select class="form-select" name="device" id="libreoxi-devices" multiple size="4">
             {% for device in all_devices %}
               <option value="{{ device.pk }}" {% if device.pk in selected_ids %}selected{% endif %}>{{ device }}</option>
@@ -50,10 +48,10 @@
         </div>
       </div>
       <div class="mt-3 d-flex flex-wrap gap-2">
-        <button type="submit" name="generate" value="1" class="btn btn-primary">Vygenerovať audit</button>
-        <button type="submit" name="export" value="pdf" class="btn btn-outline-secondary">Stiahnuť PDF</button>
-        <button type="submit" name="export" value="csv" class="btn btn-outline-secondary">Stiahnuť CSV (Excel)</button>
-        <button type="submit" name="export" value="html" class="btn btn-outline-secondary">Stiahnuť HTML</button>
+        <button type="submit" name="generate" value="1" class="btn btn-primary">{{ "ui.generate"|tr:lang }}</button>
+        <button type="submit" name="export" value="pdf" class="btn btn-outline-secondary">{{ "ui.download_pdf"|tr:lang }}</button>
+        <button type="submit" name="export" value="csv" class="btn btn-outline-secondary">{{ "ui.download_csv"|tr:lang }}</button>
+        <button type="submit" name="export" value="html" class="btn btn-outline-secondary">{{ "ui.download_html"|tr:lang }}</button>
       </div>
     </form>
   </div>
@@ -65,25 +63,56 @@
     <div>
       <strong>{{ period_label }}</strong>
       <span class="text-muted small ms-2">
-        {% if report.total %}Počet zmien: {{ report.total }}{% else %}Bez zmien{% endif %}
-        {% if report.skipped %} · pod minimálnou závažnosťou (nezahrnuté): {{ report.skipped }}{% endif %}
+        {% if report.total %}{% trf "ui.changes_count" lang total=report.total %}{% else %}{{ "ui.no_changes"|tr:lang }}{% endif %}
+        {% if report.skipped %} · {% trf "ui.skipped" lang count=report.skipped %}{% endif %}
       </span>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=pdf">Stiahnuť PDF</a>
-      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=csv">Stiahnuť CSV</a>
-      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=html">Stiahnuť HTML</a>
-      <form method="post" action="?{{ query }}" class="d-inline"
-            onsubmit="return confirm('Odoslať tento audit e-mailom na: {{ recipients|escapejs }}?');">
-        {% csrf_token %}
-        <button type="submit" name="action" value="send_email" class="btn btn-primary btn-sm"
-                {% if not recipients %}disabled title="Nastavte príjemcov v LibreOXI Settings"{% endif %}>Odoslať e-mailom</button>
-      </form>
+      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=pdf">{{ "ui.download_pdf"|tr:lang }}</a>
+      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=csv">{{ "ui.download_csv"|tr:lang }}</a>
+      <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=html">{{ "ui.download_html"|tr:lang }}</a>
+      <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#libreoxi-send-modal"
+              {% if not recipients %}disabled title="{{ "ui.set_recipients"|tr:lang }}"{% endif %}>{{ "ui.send_email"|tr:lang }}</button>
     </div>
   </div>
   <div class="card-body">
-    <div class="mb-2"><strong>Predmet:</strong> <code>{{ audit_subject }}</code></div>
+    <div class="mb-2"><strong>{{ "ui.subject"|tr:lang }}:</strong> <code>{{ audit_subject }}</code></div>
     <div class="libreoxi-audit-mail">{{ audit_html }}</div>
+  </div>
+</div>
+
+<div class="modal fade" id="libreoxi-send-modal" tabindex="-1" aria-labelledby="libreoxi-send-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="?{{ query }}" class="modal-content">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="send_email">
+      <div class="modal-header">
+        <h5 class="modal-title" id="libreoxi-send-title">{{ "ui.send_title"|tr:lang }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ "ui.cancel"|tr:lang }}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1"><strong>{{ period_label }}</strong></p>
+        <p class="mb-3"><span class="text-muted">{{ "ui.send_to"|tr:lang }}:</span> {{ recipients }}</p>
+        <div class="fw-bold mb-2">{{ "ui.attachments"|tr:lang }}</div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="attach" value="pdf" id="libreoxi-attach-pdf" {% if default_attach_pdf %}checked{% endif %}>
+          <label class="form-check-label" for="libreoxi-attach-pdf">PDF</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="attach" value="csv" id="libreoxi-attach-csv" {% if default_attach_csv %}checked{% endif %}>
+          <label class="form-check-label" for="libreoxi-attach-csv">CSV (Excel)</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="attach" value="html" id="libreoxi-attach-html">
+          <label class="form-check-label" for="libreoxi-attach-html">HTML</label>
+        </div>
+        <div class="form-text mt-2">{{ "ui.attach_none_hint"|tr:lang }}</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ "ui.cancel"|tr:lang }}</button>
+        <button type="submit" class="btn btn-primary">{{ "ui.send"|tr:lang }}</button>
+      </div>
+    </form>
   </div>
 </div>
 {% endif %}

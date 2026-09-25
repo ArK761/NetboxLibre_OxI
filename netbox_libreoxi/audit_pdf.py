@@ -5,7 +5,8 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
-from .audit import AUDIT_FIELDS, DEFAULT_AUDIT_FIELDS, SEVERITIES, SEVERITY_PLURAL, _format_time, audit_text
+from .audit import DEFAULT_AUDIT_FIELDS, _format_time, audit_fields, audit_text, report_period, severity_summary
+from .i18n import language_of, tr
 
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
@@ -36,6 +37,7 @@ def build_pdf(settings, report: dict, subject: str) -> bytes:
     from django.utils import timezone
 
     _register_fonts()
+    lang = language_of(settings)
     base = ParagraphStyle("base", fontName=FONT, fontSize=8.5, leading=11)
     small = ParagraphStyle("small", parent=base, fontSize=8, textColor=colors.HexColor("#495057"))
     header = ParagraphStyle("header", parent=base, fontName=FONT_BOLD, textColor=colors.HexColor("#212529"))
@@ -44,38 +46,37 @@ def build_pdf(settings, report: dict, subject: str) -> bytes:
     badge = ParagraphStyle("badge", parent=base, fontName=FONT_BOLD, textColor=colors.white, alignment=TA_CENTER)
 
     fields = [field for field in (getattr(settings, "audit_fields", None) or DEFAULT_AUDIT_FIELDS) if field != "ip"]
-    labels = dict(AUDIT_FIELDS)
+    labels = dict(audit_fields(lang))
     widths = {"time": 35 * mm, "severity": 23 * mm, "category": 40 * mm, "old": 55 * mm, "new": 55 * mm}
     page_width = landscape(A4)[0] - 24 * mm
     change_width = page_width - sum(widths.get(field, 0) for field in fields if field != "change")
     widths["change"] = max(change_width, 60 * mm)
 
-    if report.get("period_label"):
-        period = report["period_label"]
-    else:
-        period = f"{_format_time(report['since'], settings)} - {_format_time(report['until'], settings)}"
-    counts = report["counts"]
-    summary = ", ".join(f"{SEVERITY_PLURAL[key]}: {counts[key]}" for key, _label in reversed(SEVERITIES) if counts[key])
+    period = report_period(settings, report)
+    summary = severity_summary(report, lang)
     generated = timezone.localtime().strftime(getattr(settings, "datetime_format", "%d.%m.%Y %H:%M:%S"))
 
     story = [
-        Paragraph("Audit zmien konfigurácie sieťových zariadení", title),
-        Paragraph(escape(f"Obdobie: {period}    ·    Vygenerované: {generated}"), small),
+        Paragraph(escape(tr("report.title", lang)), title),
+        Paragraph(escape(tr("report.period", lang, period=period) + "    ·    " + tr("report.generated", lang, time=generated)), small),
         Spacer(1, 3 * mm),
         Paragraph(
-            escape(f"Počet zmien: {report['total']}" + (f" ({summary})" if summary else "") + f"    ·    Zariadenia: {len(report['devices'])}"),
+            escape(
+                tr("report.changes", lang, total=report["total"]) + (f" ({summary})" if summary else "")
+                + "    ·    " + tr("report.devices", lang, count=len(report["devices"]))
+            ),
             header,
         ),
         Spacer(1, 2 * mm),
     ]
     if not report["devices"]:
-        story.append(Paragraph("Neboli zistené žiadne zmeny zodpovedajúce nastaveniam auditu.", base))
+        story.append(Paragraph(escape(tr("report.no_changes", lang)), base))
 
     for device in report["devices"]:
         name = device["name"] + (f" ({device['ip']})" if device.get("ip") and "ip" in (getattr(settings, "audit_fields", None) or DEFAULT_AUDIT_FIELDS) else "")
         story.append(Paragraph(escape(name), device_title))
         for author in device.get("authors", []):
-            story.append(Paragraph(escape(f"Zmenu uložil: {author}"), small))
+            story.append(Paragraph(escape(tr("report.saved_by", lang, author=author)), small))
         story.append(Spacer(1, 1.5 * mm))
 
         rows = [[Paragraph(escape(labels[field]), header) for field in fields]]
@@ -98,7 +99,7 @@ def build_pdf(settings, report: dict, subject: str) -> bytes:
                 elif field == "category":
                     value = change["category_label"]
                 elif field == "change":
-                    value = audit_text(change)
+                    value = audit_text(change, lang)
                 else:
                     value = change.get(field, "")
                 row.append(Paragraph(escape(str(value)), base))
@@ -112,7 +113,7 @@ def build_pdf(settings, report: dict, subject: str) -> bytes:
         canvas.setFont(FONT, 7.5)
         canvas.setFillColor(colors.HexColor("#6c757d"))
         canvas.drawString(12 * mm, 8 * mm, subject[:150])
-        canvas.drawRightString(landscape(A4)[0] - 12 * mm, 8 * mm, f"Strana {doc.page}")
+        canvas.drawRightString(landscape(A4)[0] - 12 * mm, 8 * mm, tr("report.page", lang, page=doc.page))
         canvas.restoreState()
 
     buffer = BytesIO()
