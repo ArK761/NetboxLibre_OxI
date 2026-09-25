@@ -63,15 +63,17 @@
                 <thead><tr><th>Date/time</th><th>Event</th><th class="text-end"></th></tr></thead>
                 <tbody>
                   {% for entry in logs %}
-                    {% with detail_id='libreoxi-log-detail-'|add:forloop.counter %}
-                      <tr class="libreoxi-log-main-row">
-                        <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
-                        <td><span class="me-2">DEVICE BACKUP CHECK</span>{% if entry.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif entry.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif entry.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}</td>
-                        <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false" aria-controls="{{ detail_id }}" title="Details">⋮</button></td>
-                      </tr>
-                      <tr class="libreoxi-log-detail-row">
-                        <td colspan="3"><div id="{{ detail_id }}" class="libreoxi-log-detail collapse">{% with entry_hash=entry.message|log_hash %}<div class="text-muted small">{% if entry_hash %}SHA256{% else %}Information{% endif %}</div>{% if entry_hash %}<code>{{ entry_hash }}</code>{% else %}<span class="text-muted">No additional details available.</span>{% endif %}{% endwith %}</div></td>
-                      </tr>
+                    {% with row_no=forloop.counter|stringformat:'d' %}
+                      {% with detail_id='libreoxi-log-detail-'|add:row_no %}
+                        <tr class="libreoxi-log-main-row">
+                          <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
+                          <td><span class="me-2">DEVICE BACKUP CHECK</span>{% if entry.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif entry.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif entry.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}</td>
+                          <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false" aria-controls="{{ detail_id }}" title="Details">⋮</button></td>
+                        </tr>
+                        <tr class="libreoxi-log-detail-row">
+                          <td colspan="3"><div id="{{ detail_id }}" class="libreoxi-log-detail collapse">{% with entry_hash=entry.message|log_hash %}<div class="text-muted small">{% if entry_hash %}SHA256{% else %}Information{% endif %}</div>{% if entry_hash %}<code>{{ entry_hash }}</code>{% else %}<span class="text-muted">No additional details available.</span>{% endif %}{% endwith %}</div></td>
+                        </tr>
+                      {% endwith %}
                     {% endwith %}
                   {% endfor %}
                 </tbody>
@@ -86,27 +88,29 @@
                 <thead><tr><th>Date/time</th><th>Run</th><th class="text-end"></th></tr></thead>
                 <tbody>
                   {% for entry in scheduled_runs %}
-                    {% with detail_id='libreoxi-run-detail-'|add:forloop.counter %}
-                      <tr class="libreoxi-log-main-row">
-                        <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
-                        <td>
-                          <span class="me-2">SCHEDULED CHECK</span>
-                          <strong>{{ entry.run_summary.devices }} device{{ entry.run_summary.devices|pluralize }}</strong>
-                          <span class="text-muted libreoxi-run-inline ms-2">Started {{ entry.run_summary.started }} · Finished {{ entry.run_summary.finished }} · Duration {{ entry.run_summary.duration }}s</span>
-                        </td>
-                        <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false" aria-controls="{{ detail_id }}" title="Details">⋮</button></td>
-                      </tr>
-                      <tr class="libreoxi-log-detail-row">
-                        <td colspan="3"><div id="{{ detail_id }}" class="libreoxi-log-detail libreoxi-run-summary collapse">
-                          <div><strong>Devices checked:</strong> {{ entry.run_summary.devices }}</div>
-                          <div><strong>Started:</strong> {{ entry.run_summary.started }}</div>
-                          <div><strong>Finished:</strong> {{ entry.run_summary.finished }}</div>
-                          <div><strong>Duration:</strong> {{ entry.run_summary.duration }}s</div>
-                          <div><strong>Change:</strong> <span class="libreoxi-log-change">{{ entry.run_summary.change }}</span></div>
-                          <div><strong>No change:</strong> <span class="libreoxi-log-nochange">{{ entry.run_summary.nochange }}</span></div>
-                          <div><strong>Error:</strong> <span class="libreoxi-log-error">{{ entry.run_summary.error }}</span></div>
-                        </div></td>
-                      </tr>
+                    {% with row_no=forloop.counter|stringformat:'d' %}
+                      {% with detail_id='libreoxi-run-detail-'|add:row_no %}
+                        <tr class="libreoxi-log-main-row">
+                          <td class="text-nowrap"><code>{{ entry.timestamp }}</code></td>
+                          <td>
+                            <span class="me-2">SCHEDULED CHECK</span>
+                            <strong>{{ entry.run_summary.devices }} device{{ entry.run_summary.devices|pluralize }}</strong>
+                            <span class="text-muted libreoxi-run-inline ms-2">Started {{ entry.run_summary.started }} · Finished {{ entry.run_summary.finished }} · Duration {{ entry.run_summary.duration }}s</span>
+                          </td>
+                          <td class="libreoxi-log-toggle"><button type="button" class="libreoxi-log-toggle-btn" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false" aria-controls="{{ detail_id }}" title="Details">⋮</button></td>
+                        </tr>
+                        <tr class="libreoxi-log-detail-row">
+                          <td colspan="3"><div id="{{ detail_id }}" class="libreoxi-log-detail libreoxi-run-summary collapse">
+                            <div><strong>Devices checked:</strong> {{ entry.run_summary.devices }}</div>
+                            <div><strong>Started:</strong> {{ entry.run_summary.started }}</div>
+                            <div><strong>Finished:</strong> {{ entry.run_summary.finished }}</div>
+                            <div><strong>Duration:</strong> {{ entry.run_summary.duration }}s</div>
+                            <div><strong>Change:</strong> <span class="libreoxi-log-change">{{ entry.run_summary.change }}</span></div>
+                            <div><strong>No change:</strong> <span class="libreoxi-log-nochange">{{ entry.run_summary.nochange }}</span></div>
+                            <div><strong>Error:</strong> <span class="libreoxi-log-error">{{ entry.run_summary.error }}</span></div>
+                          </div></td>
+                        </tr>
+                      {% endwith %}
                     {% endwith %}
                   {% endfor %}
                 </tbody>
