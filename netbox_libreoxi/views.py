@@ -317,7 +317,14 @@ def settings_view(request):
     if request.method == "POST":
         form = LibreOXISettingsForm(request.POST, instance=instance)
         if form.is_valid():
-            form.save(); messages.success(request, "LibreOXI settings saved. New storage path is used immediately by device views and refresh jobs."); return redirect("plugins:netbox_libreoxi:settings")
+            instance = form.save(); messages.success(request, "LibreOXI settings saved. New storage path is used immediately by device views and refresh jobs.")
+            if request.POST.get("action") == "test_email":
+                try:
+                    audit.send_test_email(instance)
+                    messages.success(request, f"Testovací e-mail bol odoslaný na: {', '.join(audit.recipients(instance))}.")
+                except Exception as exc:
+                    messages.error(request, f"Testovací e-mail sa nepodarilo odoslať: {exc}")
+            return redirect("plugins:netbox_libreoxi:settings")
     else: form = LibreOXISettingsForm(instance=instance)
     return render(request, "netbox_libreoxi/settings.html", {"form": form})
 
@@ -372,6 +379,16 @@ def audit_view(request):
     if selected_ids:
         devices = [device for device in devices if device.pk in selected_ids]
     since, until, label = _audit_period(request, settings)
+    if request.method == "POST" and request.POST.get("action") == "send_email":
+        try:
+            result = audit.send_audit(settings, devices, since, until, label, force=True)
+            if result["sent"]:
+                messages.success(request, f"Audit ({label}) bol odoslaný na: {', '.join(audit.recipients(settings))}.")
+            else:
+                messages.warning(request, result["reason"])
+        except Exception as exc:
+            messages.error(request, f"Audit sa nepodarilo odoslať: {exc}")
+        return redirect(f"{request.path}?{request.GET.urlencode()}")
     context = {
         "settings": settings,
         "all_devices": list(monitored_devices(settings)),
@@ -382,6 +399,7 @@ def audit_view(request):
         "date_to": request.GET.get("to", ""),
         "period_label": label,
         "generated": "generate" in request.GET or "export" in request.GET,
+        "recipients": ", ".join(audit.recipients(settings)),
         "min_severity": audit.SEVERITY_LABEL.get(settings.audit_min_severity, settings.audit_min_severity),
     }
     if not context["generated"]:
@@ -399,6 +417,12 @@ def audit_view(request):
     if export == "csv":
         response = HttpResponse(audit.report_csv(settings, report), content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="libreoxi-audit_{stamp}.csv"'
+        return response
+    if export == "pdf":
+        from .audit_pdf import build_pdf
+
+        response = HttpResponse(build_pdf(settings, report, subject), content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="libreoxi-audit_{stamp}.pdf"'
         return response
     if export == "html":
         page = (

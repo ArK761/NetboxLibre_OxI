@@ -112,6 +112,20 @@ from the stored configuration history by comparing consecutive revisions, so it 
 the audit feature was installed (within the configured retention). The report can be downloaded as CSV (Excel)
 or HTML.
 
+The audit can also be downloaded as **PDF** and sent by e-mail from the Audit page (**Odoslať e-mailom**).
+
+**Automatic audit e-mail** (LibreOXI Settings → *Odosielanie auditu e-mailom*):
+
+- recipients: one or more addresses (a group address works too);
+- frequency: daily (previous day), weekly (last 7 days, on a chosen weekday) or monthly (previous month, on the 1st);
+- send time, optional e-mail when there were no changes, PDF and/or CSV attachment;
+- SMTP server, port, security (STARTTLS / SSL / none), user, password and sender. When the SMTP server is empty,
+  NetBox's own `EMAIL` settings from `configuration.py` are used;
+- **Uložiť a odoslať testovací e-mail** verifies the e-mail settings.
+
+The e-mail is sent by the NetBox background worker (`netbox-rq`); results are written to the LibreOXI log.
+PDF generation uses `reportlab` (installed automatically) and the bundled DejaVu Sans font (see `fonts/LICENSE-DejaVu.txt`).
+
 The audit report is written in Slovak and describes changes in plain language, e.g.
 `VLAN 201 "## TEST ##" bola pridaná (na bridge1, tagovaná na portoch sfp-sfpplus2, sfp-sfpplus1).`
 

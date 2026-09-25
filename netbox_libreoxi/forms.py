@@ -7,7 +7,20 @@ from django import forms
 from dcim.models import Device, DeviceRole
 from utilities.forms.fields import DynamicModelMultipleChoiceField
 
-from .audit import AUDIT_CATEGORIES, AUDIT_FIELDS, DEFAULT_AUDIT_FIELDS, SEVERITIES, severity_map
+import re
+
+from django.core.validators import validate_email
+
+from .audit import (
+    AUDIT_CATEGORIES,
+    AUDIT_FIELDS,
+    DEFAULT_AUDIT_FIELDS,
+    FREQUENCIES,
+    SEVERITIES,
+    SMTP_SECURITY,
+    WEEKDAYS,
+    severity_map,
+)
 from .models import LibreOXISettings
 from .scheduler import validate_cron_schedule
 
@@ -84,6 +97,52 @@ class LibreOXISettingsForm(forms.ModelForm):
         help_text="The device name and the change are always included.",
     )
 
+    audit_email_enabled = forms.BooleanField(
+        label="E-mail: odosielať audit automaticky",
+        required=False,
+    )
+    audit_email_recipients = forms.CharField(
+        label="E-mail: príjemcovia auditu",
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "mkb@firma.sk, security-team@firma.sk"}),
+        help_text="Jedna alebo viac adries (aj skupinová adresa), oddelené čiarkou, bodkočiarkou alebo novým riadkom.",
+    )
+    audit_email_frequency = forms.ChoiceField(label="E-mail: ako často", choices=FREQUENCIES)
+    audit_email_weekday = forms.TypedChoiceField(
+        label="E-mail: deň v týždni (pri týždennom odosielaní)", choices=WEEKDAYS, coerce=int
+    )
+    audit_email_time = forms.CharField(
+        label="E-mail: čas odoslania",
+        widget=forms.TimeInput(attrs={"type": "time"}),
+        help_text="Miestny čas NetBoxu, napríklad 07:00.",
+    )
+    audit_send_empty = forms.BooleanField(
+        label="E-mail: poslať aj keď neboli žiadne zmeny",
+        required=False,
+        help_text="Manažér dostane potvrdenie „bez zmien“; inak sa e-mail bez zmien neodošle.",
+    )
+    audit_email_attach_pdf = forms.BooleanField(label="E-mail: priložiť PDF", required=False)
+    audit_email_attach_csv = forms.BooleanField(label="E-mail: priložiť CSV (Excel)", required=False)
+    smtp_host = forms.CharField(
+        label="SMTP server",
+        required=False,
+        help_text="Napr. smtp.firma.sk. Ak je prázdne, použije sa e-mailové nastavenie NetBoxu (EMAIL v configuration.py).",
+    )
+    smtp_port = forms.IntegerField(label="SMTP port", min_value=1, max_value=65535)
+    smtp_security = forms.ChoiceField(label="SMTP zabezpečenie", choices=SMTP_SECURITY)
+    smtp_username = forms.CharField(label="SMTP používateľ", required=False)
+    smtp_password_input = forms.CharField(
+        label="SMTP heslo",
+        required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+        help_text="Nechajte prázdne, ak sa heslo nemá meniť.",
+    )
+    smtp_from = forms.CharField(
+        label="Odosielateľ (From)",
+        required=False,
+        help_text="Napr. netbox@firma.sk. Ak je prázdne, použije sa odosielateľ z nastavení NetBoxu.",
+    )
+
     class Meta:
         model = LibreOXISettings
         fields = (
@@ -103,6 +162,19 @@ class LibreOXISettingsForm(forms.ModelForm):
             "datetime_format",
             "audit_min_severity",
             "audit_fields",
+            "audit_email_enabled",
+            "audit_email_recipients",
+            "audit_email_frequency",
+            "audit_email_weekday",
+            "audit_email_time",
+            "audit_send_empty",
+            "audit_email_attach_pdf",
+            "audit_email_attach_csv",
+            "smtp_host",
+            "smtp_port",
+            "smtp_security",
+            "smtp_username",
+            "smtp_from",
         )
 
     def __init__(self, *args, **kwargs):
@@ -117,6 +189,11 @@ class LibreOXISettingsForm(forms.ModelForm):
         # ModelForm takes initial values from the instance (an empty list for new
         # settings), which would leave all checkboxes unticked; use the defaults.
         self.initial["audit_fields"] = self.instance.audit_fields or DEFAULT_AUDIT_FIELDS
+        order = list(self.fields)
+        severity_fields = [name for name in order if name.startswith("audit_severity_")]
+        rest = [name for name in order if name not in severity_fields]
+        position = rest.index("audit_min_severity")
+        self.order_fields(rest[:position] + severity_fields + rest[position:])
         self.fields["api_token"].initial = self.instance.api_token_encrypted
         self.fields["schedule_preset"].initial = ""
         if self.instance.pk:
@@ -163,6 +240,34 @@ class LibreOXISettingsForm(forms.ModelForm):
                     pass
         return str(path.resolve())
 
+    def clean_audit_email_recipients(self):
+        value = self.cleaned_data.get("audit_email_recipients", "") or ""
+        addresses = [address.strip() for address in re.split(r"[,;\s]+", value) if address.strip()]
+        for address in addresses:
+            try:
+                validate_email(address)
+            except forms.ValidationError as exc:
+                raise forms.ValidationError(f"Neplatná e-mailová adresa: {address}") from exc
+        if self.cleaned_data.get("audit_email_enabled") and not addresses:
+            raise forms.ValidationError("Zadajte aspoň jedného príjemcu, ak je odosielanie zapnuté.")
+        return ", ".join(addresses)
+
+    def clean_audit_email_time(self):
+        value = (self.cleaned_data.get("audit_email_time") or "").strip()[:5]
+        if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", value):
+            raise forms.ValidationError("Zadajte čas vo formáte HH:MM, napríklad 07:00.")
+        return value
+
+    def clean_smtp_from(self):
+        value = (self.cleaned_data.get("smtp_from") or "").strip()
+        if value:
+            address = re.search(r"<([^>]+)>", value)
+            try:
+                validate_email(address.group(1) if address else value)
+            except forms.ValidationError as exc:
+                raise forms.ValidationError("Neplatná adresa odosielateľa.") from exc
+        return value
+
     def clean_schedule_cron(self):
         value = self.cleaned_data["schedule_cron"].strip()
         preset = self.cleaned_data.get("schedule_preset")
@@ -183,6 +288,9 @@ class LibreOXISettingsForm(forms.ModelForm):
         instance.audit_severity_map = {
             key: self.cleaned_data[f"audit_severity_{key}"] for key, _label, _default in AUDIT_CATEGORIES
         }
+        password = self.cleaned_data.get("smtp_password_input")
+        if password:
+            instance.smtp_password = password
         fields = list(self.cleaned_data.get("audit_fields") or [])
         if "change" not in fields:
             fields.append("change")

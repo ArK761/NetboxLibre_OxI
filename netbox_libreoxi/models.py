@@ -33,6 +33,16 @@ class LibreOXISettings(models.Model):
     audit_severity_map = models.JSONField(default=dict, blank=True)
     audit_fields = models.JSONField(default=list, blank=True)
     audit_send_empty = models.BooleanField(default=False)
+    audit_email_frequency = models.CharField(max_length=16, default="daily")
+    audit_email_weekday = models.PositiveSmallIntegerField(default=0)
+    audit_email_attach_pdf = models.BooleanField(default=True)
+    audit_email_attach_csv = models.BooleanField(default=False)
+    smtp_host = models.CharField(max_length=255, blank=True, default="")
+    smtp_port = models.PositiveIntegerField(default=587)
+    smtp_security = models.CharField(max_length=16, default="starttls")
+    smtp_username = models.CharField(max_length=255, blank=True, default="")
+    smtp_password = models.TextField(blank=True, default="")
+    smtp_from = models.CharField(max_length=255, blank=True, default="")
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

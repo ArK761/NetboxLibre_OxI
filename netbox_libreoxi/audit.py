@@ -611,19 +611,99 @@ def recipients(settings) -> list[str]:
     return [address.strip() for address in re.split(r"[,;\s]+", raw) if address.strip()]
 
 
-def send_report(settings, since: datetime, until: datetime, force: bool = False) -> dict:
-    """Build and send the audit e-mail. Returns {"sent": bool, "total": int, "reason": str}."""
-    from django.core.mail import EmailMultiAlternatives
+FREQUENCIES = (
+    ("daily", "Denne – za predchádzajúci deň"),
+    ("weekly", "Týždenne – za posledných 7 dní"),
+    ("monthly", "Mesačne – za predchádzajúci mesiac (1. deň v mesiaci)"),
+)
+WEEKDAYS = (
+    (0, "Pondelok"),
+    (1, "Utorok"),
+    (2, "Streda"),
+    (3, "Štvrtok"),
+    (4, "Piatok"),
+    (5, "Sobota"),
+    (6, "Nedeľa"),
+)
+SMTP_SECURITY = (
+    ("starttls", "STARTTLS (zvyčajne port 587)"),
+    ("ssl", "SSL/TLS (zvyčajne port 465)"),
+    ("none", "Bez šifrovania (zvyčajne port 25)"),
+)
 
-    to = recipients(settings)
+
+def smtp_connection(settings):
+    """SMTP connection from the plugin settings, or NetBox's own EMAIL settings when no host is set."""
+    from django.core.mail import get_connection
+
+    if not (getattr(settings, "smtp_host", "") or "").strip():
+        return get_connection()
+    security = getattr(settings, "smtp_security", "starttls")
+    return get_connection(
+        "django.core.mail.backends.smtp.EmailBackend",
+        host=settings.smtp_host.strip(),
+        port=settings.smtp_port or (465 if security == "ssl" else 587),
+        username=settings.smtp_username or None,
+        password=settings.smtp_password or None,
+        use_tls=security == "starttls",
+        use_ssl=security == "ssl",
+        timeout=30,
+    )
+
+
+def from_address(settings) -> str:
+    from django.conf import settings as django_settings
+
+    return (
+        (getattr(settings, "smtp_from", "") or "").strip()
+        or getattr(django_settings, "DEFAULT_FROM_EMAIL", "")
+        or getattr(django_settings, "SERVER_EMAIL", "")
+    )
+
+
+def send_test_email(settings, to: list[str] | None = None) -> None:
+    from django.core.mail import EmailMessage
+
+    to = to or recipients(settings)
+    if not to:
+        raise ValueError("Nie sú nastavení príjemcovia auditného e-mailu.")
+    EmailMessage(
+        subject="[LibreOXI] Testovací e-mail",
+        body="Toto je testovací e-mail z NetBox LibreOXI. Nastavenie odosielania auditu funguje.",
+        from_email=from_address(settings),
+        to=to,
+        connection=smtp_connection(settings),
+    ).send(fail_silently=False)
+
+
+def send_audit(settings, devices, since, until, label: str, force: bool = False, to: list[str] | None = None) -> dict:
+    """Build the audit for the period and e-mail it. Returns {"sent", "total", "reason"}."""
+    from django.core.mail import EmailMultiAlternatives
+    from django.utils import timezone
+
+    to = to or recipients(settings)
     if not to:
         return {"sent": False, "total": 0, "reason": "Nie sú nastavení príjemcovia auditného e-mailu."}
-    report = build_report(settings, since, until)
+    entries = collect_entries(settings, devices, since, until)
+    report = _report_from_entries(
+        settings, entries, since or datetime(1970, 1, 1, tzinfo=dt_timezone.utc), until or timezone.now()
+    )
+    report["period_label"] = label
     if not report["total"] and not force and not getattr(settings, "audit_send_empty", False):
         return {"sent": False, "total": 0, "reason": "Žiadne zmeny na odoslanie."}
+
     subject, text, html = render_report(settings, report)
-    message = EmailMultiAlternatives(subject=subject, body=text, to=to)
+    message = EmailMultiAlternatives(
+        subject=subject, body=text, from_email=from_address(settings), to=to, connection=smtp_connection(settings)
+    )
     message.attach_alternative(html, "text/html")
+    stamp = timezone.localtime().strftime("%Y-%m-%d")
+    if getattr(settings, "audit_email_attach_pdf", True):
+        from .audit_pdf import build_pdf
+
+        message.attach(f"libreoxi-audit_{stamp}.pdf", build_pdf(settings, report, subject), "application/pdf")
+    if getattr(settings, "audit_email_attach_csv", False):
+        message.attach(f"libreoxi-audit_{stamp}.csv", report_csv(settings, report).encode("utf-8"), "text/csv")
     message.send(fail_silently=False)
     return {"sent": True, "total": report["total"], "reason": ""}
 
@@ -642,8 +722,8 @@ def write_last_sent(settings, when: datetime) -> None:
         pass
 
 
-def due_slot(settings, now: datetime) -> datetime | None:
-    """Return today's send time if the daily e-mail is due and not yet sent, else None."""
+def scheduled_period(settings, now: datetime):
+    """Return (slot, since, until, label) when the scheduled audit e-mail is due, else None."""
     from django.utils import timezone
 
     try:
@@ -657,15 +737,25 @@ def due_slot(settings, now: datetime) -> datetime | None:
     last_sent = read_last_sent(settings)
     if last_sent is not None and last_sent >= slot:
         return None
-    return slot
 
-
-def default_window_start(settings, until: datetime) -> datetime:
-    last_sent = read_last_sent(settings)
-    earliest = until - timedelta(days=7)
-    if last_sent is None:
-        return until - timedelta(hours=24)
-    return max(last_sent, earliest)
+    today = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    date_format = (getattr(settings, "datetime_format", "") or "%d.%m.%Y").split(" ")[0]
+    frequency = getattr(settings, "audit_email_frequency", "daily") or "daily"
+    if frequency == "weekly":
+        if local_now.weekday() != (getattr(settings, "audit_email_weekday", 0) or 0):
+            return None
+        since = timezone.make_aware(datetime.combine((today - timedelta(days=7)).date(), datetime.min.time()))
+        last_day = (today - timedelta(days=1)).date()
+        return slot, since, today, f"Týždeň {since.strftime(date_format)} – {last_day.strftime(date_format)}"
+    if frequency == "monthly":
+        if local_now.day != 1:
+            return None
+        previous = (today - timedelta(days=1)).date().replace(day=1)
+        since = timezone.make_aware(datetime.combine(previous, datetime.min.time()))
+        return slot, since, today, f"Mesiac {previous.strftime('%m/%Y')}"
+    yesterday = (today - timedelta(days=1)).date()
+    since = timezone.make_aware(datetime.combine(yesterday, datetime.min.time()))
+    return slot, since, today, f"Včera ({yesterday.strftime(date_format)})"
 
 
 # --------------------------------------------------------------------------
