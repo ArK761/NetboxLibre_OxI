@@ -73,6 +73,22 @@ The comparison provides:
 - a simple summary of added/removed/changed content;
 - the original configuration snapshots remain unchanged by the comparison.
 
+#### Detected changes (semantic summary)
+
+Above the line-by-line diff, the comparison page lists the changes in human-readable form, for example:
+
+- `Interface GigabitEthernet1/0/5: access VLAN changed "10" -> "20"`
+- `VLAN 10: name changed "Users" -> "Staff"`
+- `Interface Gi1/0/1: description changed "Uplink" -> "Uplink to core-2"`
+- `Interface Gi1/0/6: administratively disabled (shutdown)`
+- `VLAN 30 added (name Guests)`
+- `Hostname changed "SW1" -> "SW2"`
+
+The configuration is parsed into sections without any external dependency, so it works across vendors:
+indentation-based configurations (Cisco IOS/NX-OS, Arista, Huawei, HP/Aruba, Fortinet), brace-based
+configurations (Juniper Junos, VyOS), `set`-style configurations (Junos/VyOS display set) and MikroTik exports.
+Changes that only reorder lines or change comments/timestamps are ignored.
+
 ### Monitoring, refresh and audit logs
 
 - Automatic checks run asynchronously according to the configured check interval.

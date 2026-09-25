@@ -40,6 +40,42 @@
         <strong>Newer:</strong> <code>{{ new_name }}</code>
       </div>
 
+      <div class="card mb-3">
+        <div class="card-header">
+          <strong>Detected changes</strong>
+          <span class="badge text-bg-success ms-2">{{ change_counts.added }} added</span>
+          <span class="badge text-bg-danger ms-1">{{ change_counts.removed }} removed</span>
+          <span class="badge text-bg-warning ms-1">{{ change_counts.modified }} modified</span>
+        </div>
+        {% if changes %}
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 libreoxi-changes">
+              <thead>
+                <tr><th>Action</th><th>Category</th><th>Change</th><th>Older line</th><th>Newer line</th></tr>
+              </thead>
+              <tbody>
+                {% for change in changes %}
+                  <tr>
+                    <td>
+                      {% if change.action == "added" %}<span class="badge text-bg-success">Added</span>
+                      {% elif change.action == "removed" %}<span class="badge text-bg-danger">Removed</span>
+                      {% else %}<span class="badge text-bg-warning">Modified</span>{% endif %}
+                    </td>
+                    <td>{{ change.category }}</td>
+                    <td>{{ change.message }}</td>
+                    <td><code>{{ change.old }}</code></td>
+                    <td><code>{{ change.new }}</code></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="card-body text-muted">No configuration changes detected (only ordering or comments differ).</div>
+        {% endif %}
+      </div>
+
+      <h6 class="mb-2">Line-by-line comparison</h6>
       <div class="table-responsive libreoxi-diff">
         {{ diff_html }}
       </div>
