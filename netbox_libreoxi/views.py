@@ -13,6 +13,7 @@ from dcim.models import Device
 from netbox.views import generic
 from utilities.views import ViewTab, register_model_view
 
+from .config_changes import compare as compare_changes, summary as change_summary
 from .forms import LibreOXISettingsForm
 from .models import LibreOXISettings
 from .oxi import fetch_device, monitored_devices
@@ -234,7 +235,8 @@ def compare_config(request, pk):
         elif tag == "delete": removed += i2 - i1
         elif tag == "replace": removed += i2 - i1; added += j2 - j1; changed += 1
     html_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=format_revision(old_name, settings), todesc=format_revision(new_name, settings), context=False, numlines=3)
-    return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff)})
+    changes = compare_changes(old_content, new_content)
+    return render(request, "netbox_libreoxi/compare.html", {"object": device, "device": device, "tab": DeviceLibreOXIView.tab, "old_name": old_name, "new_name": new_name, "added": added, "removed": removed, "changed": changed, "diff_html": mark_safe(html_diff), "changes": changes, "change_counts": change_summary(changes)})
 
 
 def delete_revision(request, pk):
