@@ -77,7 +77,7 @@ def watchable_types() -> list[tuple[str, list[tuple[str, str]]]]:
 
 
 def custom_fields(key: str) -> list:
-    """Custom fields assigned to the object type."""
+    """Custom fields assigned to the object type, in NetBox order (group, weight, name)."""
     try:
         from extras.models import CustomField
     except ImportError:
@@ -85,36 +85,94 @@ def custom_fields(key: str) -> list:
     app_label, _, model_name = key.partition(".")
     for lookup in ("object_types", "content_types"):
         try:
-            return list(
-                CustomField.objects.filter(**{f"{lookup}__app_label": app_label, f"{lookup}__model": model_name}).order_by("name")
-            )
+            return list(CustomField.objects.filter(**{f"{lookup}__app_label": app_label, f"{lookup}__model": model_name}))
         except Exception:  # field name differs between NetBox versions
             continue
     return []
 
 
-def discover_fields(key: str) -> list[tuple[str, str, str]]:
-    """[(field key, label, kind)] of an object type; kind is "field" or "custom"."""
+def _flatten(items) -> list[str]:
+    """Field names of a NetBox FieldSet (strings, InlineFields, TabbedGroups)."""
+    names = []
+    for item in items or ():
+        if isinstance(item, str):
+            names.append(item)
+        elif hasattr(item, "fields"):
+            names.extend(_flatten(item.fields))
+        elif hasattr(item, "tabs"):
+            for tab in item.tabs:
+                names.extend(_flatten(getattr(tab, "fields", ())))
+        elif hasattr(item, "items"):
+            names.extend(_flatten(item.items))
+    return names
+
+
+def _form_layout(model) -> list[tuple[str, list[str]]]:
+    """[(fieldset name, [field names])] of the NetBox edit form of the model, in the order shown in NetBox."""
+    import importlib
+
+    try:
+        forms = importlib.import_module(f"{model._meta.app_label}.forms")
+        form = getattr(forms, f"{model.__name__}Form", None)
+    except Exception:
+        return []
+    layout = []
+    for fieldset in getattr(form, "fieldsets", None) or ():
+        items = getattr(fieldset, "items", None)
+        if items is None and isinstance(fieldset, (list, tuple)) and len(fieldset) == 2:  # old style (name, fields)
+            name, items = fieldset
+        else:
+            name = getattr(fieldset, "name", "")
+        layout.append((str(name or ""), _flatten(items)))
+    return layout
+
+
+def field_sections(key: str, lang: str = "en") -> list[tuple[str, list[tuple[str, str, str]]]]:
+    """Fields of an object type grouped as in the NetBox edit form: [(section, [(field key, label, kind)])].
+
+    NetBox fieldsets first (in their order), then model fields not shown in the form, then custom fields
+    (by their group). kind is "field" or "custom".
+    """
     model = model_for(key)
     if model is None:
         return []
-    fields = []
-    names = set()
+    model_fields = {}
     for field in model._meta.get_fields():
         if field.auto_created and not field.concrete:
             continue  # reverse relations
         if not (getattr(field, "concrete", False) or getattr(field, "many_to_many", False)):
             continue
         name = field.name
-        if name in SKIP_FIELDS or name.startswith("_") or name in names:
+        if name in SKIP_FIELDS or name.startswith("_") or name in model_fields:
             continue
-        names.add(name)
-        fields.append((name, _label(getattr(field, "verbose_name", name)), "field"))
-    if hasattr(model, "tags") and "tags" not in names:
-        fields.append(("tags", "Tags", "field"))
+        model_fields[name] = _label(getattr(field, "verbose_name", name))
+    if hasattr(model, "tags") and "tags" not in model_fields:
+        model_fields["tags"] = "Tags"
+
+    sections = []
+    used = set()
+    for name, items in _form_layout(model):
+        fields = [(item, model_fields[item], "field") for item in items if item in model_fields and item not in used]
+        used.update(item for item, _label_, _kind in fields)
+        if fields:
+            sections.append((_label(name) or type_label(key), fields))
+    rest = [(name, label, "field") for name, label in model_fields.items() if name not in used]
+    if rest:
+        sections.append((tr("self.other_fields", lang) if sections else tr("self.fields", lang), rest))
+
+    groups: dict[str, list] = {}
     for custom_field in custom_fields(key):
-        fields.append((f"cf:{custom_field.name}", _label(custom_field.label or custom_field.name), "custom"))
-    return fields
+        group = str(getattr(custom_field, "group_name", "") or "")
+        groups.setdefault(group, []).append((f"cf:{custom_field.name}", _label(custom_field.label or custom_field.name), "custom"))
+    for group, fields in groups.items():
+        title = tr("self.custom_fields", lang) + (f" – {group}" if group else "")
+        sections.append((title, fields))
+    return sections
+
+
+def discover_fields(key: str) -> list[tuple[str, str, str]]:
+    """[(field key, label, kind)] of an object type in NetBox order; kind is "field" or "custom"."""
+    return [field for _section, fields in field_sections(key) for field in fields]
 
 
 def field_label(key: str, field: str, lang: str = "en") -> str:

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from difflib import HtmlDiff, SequenceMatcher
@@ -666,14 +667,12 @@ def self_settings_view(request):
     rows = []
     if selected and self_audit.model_for(selected) is not None:
         rules = {rule.field: rule for rule in SelfAuditRule.objects.filter(object_type=selected)}
-        sections = [("self.events", [(field, self_audit.field_label(selected, field, lang), "event") for field in self_audit.EVENTS])]
-        fields = self_audit.discover_fields(selected)
-        sections.append(("self.fields", [item for item in fields if item[2] == "field"]))
-        sections.append(("self.custom_fields", [item for item in fields if item[2] == "custom"]))
+        sections = [(tr("self.events", lang), [(field, self_audit.field_label(selected, field, lang), "event") for field in self_audit.EVENTS])]
+        sections.extend(self_audit.field_sections(selected, lang))
         for title, items in sections:
             if not items:
                 continue
-            rows.append({"section": tr(title, lang)})
+            rows.append({"section": title})
             for field, label, kind in items:
                 rule = rules.get(field)
                 rows.append({
@@ -688,10 +687,28 @@ def self_settings_view(request):
     elif selected:
         selected = ""
 
-    counts = {}
+    by_type: dict[str, dict] = {}
     for rule in SelfAuditRule.objects.all():
-        counts[rule.object_type] = counts.get(rule.object_type, 0) + 1
-    watched_types = sorted(((key, self_audit.type_label(key), count) for key, count in counts.items()), key=lambda item: item[1].lower())
+        by_type.setdefault(rule.object_type, {})[rule.field] = rule
+    overview = []
+    for key, type_rules in by_type.items():
+        order = list(self_audit.EVENTS) + [name for name, _label, _kind in self_audit.discover_fields(key)]
+        fields = sorted(type_rules, key=lambda field: order.index(field) if field in order else len(order))
+        overview.append({
+            "key": key,
+            "label": self_audit.type_label(key),
+            "count": len(type_rules),
+            "rules": [
+                {
+                    "label": self_audit.field_label(key, field, lang),
+                    "severity": type_rules[field].severity,
+                    "severity_label": audit.severity_label(type_rules[field].severity, lang),
+                }
+                for field in fields
+            ],
+        })
+    overview.sort(key=lambda item: item["label"].lower())
+    watched_types = [(item["key"], item["label"], item["count"]) for item in overview]
     return render(request, "netbox_libreoxi/self_settings.html", {
         "settings": settings,
         "lang": lang,
@@ -700,6 +717,8 @@ def self_settings_view(request):
         "selected_label": self_audit.type_label(selected) if selected else "",
         "rows": rows,
         "watched_types": watched_types,
+        "overview": overview,
+        "unsaved_text": mark_safe(json.dumps(tr("self.unsaved", lang))),
         "severities": audit.severities(lang),
         "placeholders": ", ".join("{" + name + "}" for name in self_audit.PLACEHOLDERS),
     })

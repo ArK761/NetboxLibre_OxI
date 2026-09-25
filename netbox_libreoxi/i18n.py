@@ -653,5 +653,16 @@ MESSAGES: dict[str, dict[str, str]] = {
     "self.select_all": {"en": "all", "sk": "všetky", "cs": "všechny", "de": "alle"},
     "self.select_none": {"en": "none", "sk": "žiadne", "cs": "žádné", "de": "keine"},
     "self.unknown_type": {"en": "Unknown object type.", "sk": "Neznámy typ objektu.", "cs": "Neznámý typ objektu.", "de": "Unbekannter Objekttyp."},
+    "self.other_fields": {"en": "Other fields", "sk": "Ostatné polia", "cs": "Ostatní pole", "de": "Weitere Felder"},
+    "self.save_fields": {"en": "Save watched fields", "sk": "Uložiť sledované polia", "cs": "Uložit sledovaná pole", "de": "Überwachte Felder speichern"},
+    "self.save_options": {"en": "Save options", "sk": "Uložiť možnosti", "cs": "Uložit možnosti", "de": "Optionen speichern"},
+    "self.overview": {"en": "Overview of watched fields", "sk": "Prehľad sledovaných polí", "cs": "Přehled sledovaných polí", "de": "Übersicht der überwachten Felder"},
+    "self.edit": {"en": "edit", "sk": "upraviť", "cs": "upravit", "de": "bearbeiten"},
+    "self.unsaved": {
+        "en": "You have unsaved changes of the watched fields. Leave without saving?",
+        "sk": "Máš neuložené zmeny sledovaných polí. Odísť bez uloženia?",
+        "cs": "Máš neuložené změny sledovaných polí. Odejít bez uložení?",
+        "de": "Es gibt ungespeicherte Änderungen der überwachten Felder. Ohne Speichern verlassen?",
+    },
 }
 # fmt: on
