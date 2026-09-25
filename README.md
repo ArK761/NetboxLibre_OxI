@@ -7,8 +7,11 @@ NetBox plugin for monitoring and storing network device configurations retrieved
 Install or upgrade the plugin with the standard pip command:
 
 ```bash
-pip install --upgrade --force-reinstall git+https://github.com/ArK761/NetboxLibre_OxI.git
+pip install --upgrade --force-reinstall git+https://github.com/ArK761/NetboxLibre_OxI.git@1.0.1
 ```
+
+Without `@<version>` pip installs the latest code from the `main` branch. To return to an older release use its tag,
+e.g. `...NetboxLibre_OxI.git@1.0.0`.
 
 After installing the plugin, create the LibreOXI filesystem storage directory manually on the NetBox server. The NetBox service user must own the directory because the plugin writes configurations, hashes, history and logs there.
 
@@ -25,10 +28,10 @@ cd /opt/netbox/netbox
 ./manage.py migrate netbox_libreoxi
 ```
 
-Restart the NetBox service after installation or upgrade:
+Restart NetBox and its background worker after installation or upgrade:
 
 ```bash
-systemctl restart netbox.service
+systemctl restart netbox netbox-rq
 ```
 
 The default LibreOXI storage path is `/opt/libreoxi`.
@@ -83,13 +86,26 @@ Above the line-by-line diff, the comparison page lists the changes in human-read
 - `Interface Gi1/0/6: administratively disabled (shutdown)`
 - `VLAN 30 added (name Guests)`
 - `Hostname changed "SW1" -> "SW2"`
+- `Port ether2: native VLAN (PVID) changed "10" -> "40"`
+- `Port ether5 was added (bridge bridge1, PVID 40)`
+- `VLAN interface vlan40: IP address added "10.40.0.1/24"`
+- `Firmware (RouterOS) changed from "7.14.2" to "7.15.1"`
 
 The configuration is parsed into sections without any external dependency, so it works across vendors:
-indentation-based configurations (Cisco IOS/NX-OS, Arista, Huawei, HP/Aruba, Fortinet), brace-based
-configurations (Juniper Junos, VyOS), `set`-style configurations (Junos/VyOS display set), MikroTik exports and
-pfSense/OPNsense `config.xml` (firewall rules, NAT, aliases, users, interfaces, VLANs, SNMP, web GUI). For pfSense the
+indentation-based configurations (Cisco IOS/NX-OS, Arista, HP/Aruba incl. Aruba Instant On 1930, Dell OS10,
+Allied Telesis AlliedWare Plus, Ubiquiti EdgeSwitch, Fortinet), brace-based configurations (Juniper Junos, VyOS),
+`set`-style configurations (Junos/VyOS display set), MikroTik RouterOS exports and pfSense/OPNsense `config.xml`
+(firewall rules, NAT, aliases, users, interfaces, VLANs, SNMP, web GUI). For pfSense the
 audit also shows who saved the configuration (from `<revision>`).
 Changes that only reorder lines or change comments/timestamps are ignored.
+
+#### Firmware / OS version
+
+The firmware or OS version is read from the header Oxidized adds to the configuration (pfSense/OPNsense
+`<!-- PFsense 26.03-RELEASE -->`, MikroTik `installed-version` / `by RouterOS`, RouterBOOT, Aruba Instant On,
+FortiOS, ProCurve/ArubaOS, EdgeSwitch, AlliedWare Plus, Dell OS10 `Software version`, Cisco IOS `Image: Software`,
+Junos). A version change is reported as its own change and audit category (Critical by default).
+A generic "software/firmware version" line is used only when no vendor-specific version is found.
 
 #### Audit for the security manager
 
@@ -97,6 +113,7 @@ Every detected change is assigned an audit category and a severity:
 
 | Category | Default severity |
 |---|---|
+| Firmware / OS version | Critical |
 | Firewall / ACL / VPN (rules, NAT, aliases, VPN) | Critical |
 | Users and access (users, passwords, AAA) | Critical |
 | Device management (SNMP, SSH/HTTP, logging, NTP, management VLAN) | High |
@@ -109,10 +126,8 @@ Every detected change is assigned an audit category and a severity:
 The **LibreOXI → Audit** page generates the audit for all monitored devices at once (or selected devices)
 for today, yesterday, the last 7 days, a specific day, a date range or the complete stored history. It is built
 from the stored configuration history by comparing consecutive revisions, so it also covers changes made before
-the audit feature was installed (within the configured retention). The report can be downloaded as CSV (Excel)
-or HTML.
-
-The audit can also be downloaded as **PDF** and sent by e-mail from the Audit page (**Odoslať e-mailom**).
+the audit feature was installed (within the configured retention). The report can be downloaded as **PDF**,
+**CSV** (Excel) or **HTML** and sent by e-mail from the Audit page (**Send by e-mail**).
 
 **Automatic audit e-mail** (separate page **LibreOXI → E-mail**):
 
@@ -124,24 +139,35 @@ The audit can also be downloaded as **PDF** and sent by e-mail from the Audit pa
   (Disabled / SSL / TLS-STARTTLS), Auto TLS and optional SMTP authentication. The plugin talks to the SMTP server
   directly, independently of NetBox's own e-mail configuration. When the SMTP server is empty, NetBox's `EMAIL`
   settings from `configuration.py` are used;
-- **Poslať testovací e-mail** sends a test e-mail using the saved settings.
+- **Send test e-mail** sends a test e-mail using the saved settings (save the settings first); the recipients are
+  chosen in a dialog.
 
 The e-mail is sent by the NetBox background worker (`netbox-rq`); results are written to the LibreOXI log.
 PDF generation uses `reportlab` (installed automatically) and the bundled DejaVu Sans font (see `fonts/LICENSE-DejaVu.txt`).
 
-**Language:** LibreOXI Settings → *Language* selects English (default), Slovak, Czech or German for the audit
-(e-mail, PDF, CSV, preview) and for the Audit and E-mail pages.
+**Language:** LibreOXI Settings → *Language* selects English (default), Slovak, Czech or German for the whole
+plugin UI (menu, Settings, Logs, device tab, compare, Audit and E-mail pages) and for the audit (e-mail, PDF, CSV,
+preview). Log files are always written in English.
 
 When sending an audit from the Audit page, a dialog asks for the recipients (ticked from the configured list and/or
-other addresses), whether to attach the PDF and whether to protect it with a password. The test e-mail on the E-mail page
-also asks for the recipients.
+other addresses), whether to attach the PDF and whether to protect it with a password. PDF is the only attachment type.
 
 The audit describes changes in plain language, e.g.
 `VLAN 201 "## TEST ##" was added (on bridge1, tagged on ports sfp-sfpplus2, sfp-sfpplus1).`
 
 Severities, the minimum severity reported to the security manager and the fields included in the
 report are configured in LibreOXI Settings. The compare page shows an **Audit preview** of exactly
-what would be sent. Passwords, secrets, SNMP communities and keys are masked (`*****`) in the audit.
+what would be sent.
+
+### Passwords and secrets
+
+- Passwords, secrets, keys, pre-shared keys and SNMP communities are masked in the compare summary, audit, PDF and
+  e-mail — the audit only says that a password/secret was changed.
+- pfSense/OPNsense XML secrets are compared by fingerprint; the value is never displayed.
+- The SMTP password and PDF password fields are not shown back in the form after saving.
+- The LibreNMS API token, SMTP password and PDF password are stored in the NetBox database **as plain text**
+  (not encrypted). Restrict access to the NetBox database and its backups accordingly.
+- A password-protected PDF uses 128-bit encryption; printing and copying text are allowed, editing is blocked.
 
 ### Monitoring, refresh and audit logs
 
@@ -156,6 +182,9 @@ what would be sent. Passwords, secrets, SNMP communities and keys are masked (`*
 - The LibreOXI main menu contains a global Logs page showing checks and configuration changes across all monitored devices.
 - Logs and configuration history are stored on the configured filesystem storage root.
 - Log rows keep the SHA-256 available behind an expandable details control while keeping the normal audit view compact.
+- The Logs page shows the latest status of every device (change / no change / error) with counts, can be filtered by
+  status and searched, and pages the device list (latest 10, then 20 more).
+- Log files are read backwards, so the page stays fast even with large log files.
 
 ### Date/time display format
 
@@ -177,31 +206,3 @@ The selected display format applies to device check times, configuration history
 - The configured storage path is validated when settings are saved: it must exist, be a directory, and be writable by the NetBox process.
 - A real temporary file write/delete test is performed during validation.
 - The configured storage path is used immediately by device views and scheduled refresh jobs.
-
-## Initial design
-
-- LibreNMS/OXI is the configuration source.
-- The NetBox database stores plugin settings and metadata only.
-- Configuration files, SHA-256 hashes, history and logs are stored on the filesystem.
-- A failed or invalid API response must never overwrite the last valid configuration.
-- Automatic checks run asynchronously.
-- Device pages provide a LibreOXI tab and a manual Refresh action.
-- If the configuration hash is unchanged, no new revision is created.
-- If the hash changes, the new configuration is stored and compared with the previous revision.
-- History retention is controlled by age and maximum revision count.
-- Plugin settings are editable through the NetBox web UI and take effect without restarting NetBox.
-
-## Planned structure
-
-```
-netbox_libreoxi/
-  api/
-  jobs/
-  storage/
-  models/
-  views/
-  templates/
-  templatetags/
-  migrations/
-tests/
-```
