@@ -37,7 +37,14 @@
     <div class="row g-0">
       <div class="col-md-4 border-end libreoxi-log-tree">
         <div class="p-2 text-muted">{{ "logs.devices"|tr:lang }}</div>
+        <div class="px-2 pb-2 d-flex flex-wrap gap-1" role="group" title="{{ "ui.filter_hint"|tr:lang }}">
+          <a class="btn btn-sm {% if not status %}btn-secondary{% else %}btn-outline-secondary{% endif %}" href="?{{ filter_qs }}">{{ "ui.filter_all"|tr:lang }} <span class="badge text-bg-light ms-1">{{ status_total }}</span></a>
+          <a class="btn btn-sm {% if status == 'CHANGE' %}btn-warning{% else %}btn-outline-warning{% endif %}" href="?status=CHANGE{% if filter_qs %}&{{ filter_qs }}{% endif %}">CHANGE <span class="badge text-bg-light ms-1">{{ status_counts.CHANGE }}</span></a>
+          <a class="btn btn-sm {% if status == 'NOCHANGE' %}btn-success{% else %}btn-outline-success{% endif %}" href="?status=NOCHANGE{% if filter_qs %}&{{ filter_qs }}{% endif %}">NO CHANGE <span class="badge text-bg-light ms-1">{{ status_counts.NOCHANGE }}</span></a>
+          <a class="btn btn-sm {% if status == 'ERROR' %}btn-danger{% else %}btn-outline-danger{% endif %}" href="?status=ERROR{% if filter_qs %}&{{ filter_qs }}{% endif %}">ERROR <span class="badge text-bg-light ms-1">{{ status_counts.ERROR }}</span></a>
+        </div>
         <form method="get" class="px-2 pb-2 d-flex gap-2">
+          {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
           <input class="form-control form-control-sm" type="search" name="q" value="{{ query }}" placeholder="{{ "ui.search_device"|tr:lang }}">
           <button class="btn btn-sm btn-outline-secondary" type="submit">{{ "ui.search"|tr:lang }}</button>
         </form>

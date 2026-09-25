@@ -149,15 +149,18 @@ def _page_size(request, name):
     return max(PAGE_FIRST, min(value, 5000))
 
 
-def read_device_logs(root, device, settings, limit=PAGE_FIRST):
-    """Newest log entries of a device; returns (entries, has_more)."""
+LOG_STATUSES = ("CHANGE", "NOCHANGE", "ERROR")
+
+
+def read_device_logs(root, device, settings, limit=PAGE_FIRST, event=None):
+    """Newest log entries of a device (optionally only one event type); returns (entries, has_more)."""
     needle = str(device)
     entries = []
     for line in _iter_log_lines_reverse(root):
         if needle not in line:
             continue
         parsed = _parse_log_line(line, settings)
-        if parsed["device_name"] == needle:
+        if parsed["device_name"] == needle and (not event or parsed["event"] == event):
             if len(entries) >= limit:
                 return entries, True
             entries.append(parsed)
@@ -363,17 +366,27 @@ def logs_view(request):
         return render(request, "netbox_libreoxi/logs.html", {"settings": None, "devices": [], "selected_device": None, "logs": [], "scheduled_runs": [], "lang": "en"})
 
     query = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "").strip().upper()
+    status = status if status in LOG_STATUSES else ""
     all_devices = monitored_devices(settings)
     if query:
         all_devices = all_devices.filter(name__icontains=query)
     device_limit = _page_size(request, "devices")
-    devices = list(all_devices[: device_limit + 1])
-    devices_more = len(devices) > device_limit
-    devices = devices[:device_limit]
 
-    latest = latest_device_logs(settings.storage_root, devices, settings)
-    for device in devices:
+    # Latest status of every matching device (one backwards pass; the last scheduled
+    # run normally contains all devices, so only the end of the log is read).
+    candidates = list(all_devices)
+    status_total = len(candidates)
+    latest = latest_device_logs(settings.storage_root, candidates, settings)
+    status_counts = {key: 0 for key in LOG_STATUSES}
+    for device in candidates:
         device.latest_log = latest.get(str(device))
+        if device.latest_log and device.latest_log["event"] in status_counts:
+            status_counts[device.latest_log["event"]] += 1
+    if status:
+        candidates = [device for device in candidates if device.latest_log and device.latest_log["event"] == status]
+    devices_more = len(candidates) > device_limit
+    devices = candidates[:device_limit]
 
     limit = _page_size(request, "limit")
     selected_device = None
@@ -382,7 +395,7 @@ def logs_view(request):
     if selected_id.isdigit():
         selected_device = monitored_devices(settings).filter(pk=int(selected_id)).first()
     if selected_device:
-        logs, logs_more = read_device_logs(settings.storage_root, selected_device, settings, limit)
+        logs, logs_more = read_device_logs(settings.storage_root, selected_device, settings, limit, event=status or None)
     else:
         scheduled_runs, runs_more = read_scheduler_logs(settings.storage_root, settings, limit)
 
@@ -398,8 +411,16 @@ def logs_view(request):
         "devices_more": devices_more, "devices_more_url": more_url(devices=device_limit + PAGE_MORE),
         "logs_more": logs_more or runs_more, "logs_more_url": more_url(limit=limit + PAGE_MORE),
         "device_limit": device_limit,
+        "status": status,
+        "status_counts": status_counts,
+        "status_total": status_total,
+        "filter_qs": f"q={quote(query)}" if query else "",
         "list_qs": "&".join(
-            part for part in (f"q={quote(query)}" if query else "", f"devices={device_limit}" if device_limit != PAGE_FIRST else "") if part
+            part for part in (
+                f"q={quote(query)}" if query else "",
+                f"status={status}" if status else "",
+                f"devices={device_limit}" if device_limit != PAGE_FIRST else "",
+            ) if part
         ),
     })
 

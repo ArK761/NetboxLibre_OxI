@@ -555,5 +555,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "cs": 'Firmware ({kind}) – změna verze z "{old}" na "{new}".',
         "de": 'Firmware ({kind}) geändert von "{old}" auf "{new}".',
     },
+    "ui.filter_all": {"en": "All", "sk": "Všetky", "cs": "Vše", "de": "Alle"},
+    "ui.filter_hint": {"en": "Filter by the latest check result", "sk": "Filter podľa výsledku poslednej kontroly", "cs": "Filtr podle výsledku poslední kontroly", "de": "Nach dem Ergebnis der letzten Prüfung filtern"},
 }
 # fmt: on
