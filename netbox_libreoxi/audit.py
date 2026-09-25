@@ -665,6 +665,25 @@ def render_report(settings, report: dict) -> tuple[str, str, str]:
     return subject, "\n".join(text), "".join(html)
 
 
+def parse_addresses(raw: str) -> list[str]:
+    """Split and validate e-mail addresses; raises ValueError with the first invalid address."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    addresses = []
+    for address in re.split(r"[,;\s]+", raw or ""):
+        address = address.strip()
+        if not address:
+            continue
+        try:
+            validate_email(address)
+        except ValidationError as exc:
+            raise ValueError(address) from exc
+        if address not in addresses:
+            addresses.append(address)
+    return addresses
+
+
 def recipients(settings) -> list[str]:
     raw = getattr(settings, "audit_email_recipients", "") or ""
     return [address.strip() for address in re.split(r"[,;\s]+", raw) if address.strip()]
@@ -763,11 +782,12 @@ def html_document(settings, report: dict) -> str:
 
 def send_audit(
     settings, devices, since, until, label: str, force: bool = False, to: list[str] | None = None,
-    attachments: list[str] | None = None,
+    attach_pdf: bool | None = None, pdf_password: str | None = None,
 ) -> dict:
-    """Build the audit for the period and e-mail it. Returns {"sent", "total", "reason"}.
+    """Build the audit for the period and e-mail it. Returns {"sent", "total", "reason", "reason_en"}.
 
-    attachments: list of "pdf", "csv", "html"; None = use the saved e-mail settings.
+    The audit is always in the e-mail body; an optional PDF attachment can be password protected.
+    attach_pdf / pdf_password None = use the saved e-mail settings.
     """
     from django.core.mail import EmailMultiAlternatives
     from django.utils import timezone
@@ -780,27 +800,18 @@ def send_audit(
     if not report["total"] and not force and not getattr(settings, "audit_send_empty", False):
         return {"sent": False, "total": 0, "reason": tr("mail.no_changes", lang), "reason_en": tr("mail.no_changes", "en")}
 
-    if attachments is None:
-        attachments = [
-            kind
-            for kind, enabled in (
-                ("pdf", getattr(settings, "audit_email_attach_pdf", True)),
-                ("csv", getattr(settings, "audit_email_attach_csv", False)),
-            )
-            if enabled
-        ]
+    if attach_pdf is None:
+        attach_pdf = getattr(settings, "audit_email_attach_pdf", True)
+    if pdf_password is None:
+        pdf_password = getattr(settings, "audit_pdf_password", "") or ""
     subject, text, html = render_report(settings, report)
     message = EmailMultiAlternatives(subject=subject, body=text, from_email=from_address(settings), to=to)
     message.attach_alternative(html, "text/html")
-    stamp = timezone.localtime().strftime("%Y-%m-%d")
-    if "pdf" in attachments:
+    if attach_pdf:
         from .audit_pdf import build_pdf
 
-        message.attach(f"libreoxi-audit_{stamp}.pdf", build_pdf(settings, report, subject), "application/pdf")
-    if "csv" in attachments:
-        message.attach(f"libreoxi-audit_{stamp}.csv", report_csv(settings, report).encode("utf-8"), "text/csv")
-    if "html" in attachments:
-        message.attach(f"libreoxi-audit_{stamp}.html", html_document(settings, report).encode("utf-8"), "text/html")
+        stamp = timezone.localtime().strftime("%Y-%m-%d")
+        message.attach(f"libreoxi-audit_{stamp}.pdf", build_pdf(settings, report, subject, pdf_password or None), "application/pdf")
     _deliver(settings, message)
     return {"sent": True, "total": report["total"], "reason": ""}
 

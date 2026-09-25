@@ -1,4 +1,4 @@
-<div class="mb-3{% if field.name == 'smtp_username' or field.name == 'smtp_password_input' %} libreoxi-auth{% endif %}{% if field.name == 'audit_email_weekday' %} libreoxi-weekday{% endif %}">
+<div class="mb-3{% if field.name == 'smtp_username' or field.name == 'smtp_password_input' %} libreoxi-auth{% endif %}{% if field.name == 'audit_email_weekday' %} libreoxi-weekday{% endif %}{% if field.name == 'audit_pdf_password_input' %} libreoxi-pdfpass{% endif %}">
   {% if field.field.widget.input_type == "checkbox" %}
     <div class="form-check form-switch">
       {{ field }}

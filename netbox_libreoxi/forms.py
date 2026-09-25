@@ -268,7 +268,11 @@ class LibreOXIEmailForm(forms.ModelForm):
     audit_email_time = forms.CharField(widget=forms.TimeInput(attrs={"type": "time"}))
     audit_send_empty = forms.BooleanField(required=False)
     audit_email_attach_pdf = forms.BooleanField(required=False)
-    audit_email_attach_csv = forms.BooleanField(required=False)
+    audit_pdf_protect = forms.BooleanField(required=False)
+    audit_pdf_password_input = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+    )
 
     class Meta:
         model = LibreOXISettings
@@ -289,7 +293,6 @@ class LibreOXIEmailForm(forms.ModelForm):
             "audit_email_time",
             "audit_send_empty",
             "audit_email_attach_pdf",
-            "audit_email_attach_csv",
         )
 
     LABELS = {
@@ -310,7 +313,8 @@ class LibreOXIEmailForm(forms.ModelForm):
         "audit_email_time": ("form.time", "form.time_help"),
         "audit_send_empty": ("form.send_empty", "form.send_empty_help"),
         "audit_email_attach_pdf": ("form.attach_pdf", None),
-        "audit_email_attach_csv": ("form.attach_csv", None),
+        "audit_pdf_protect": ("form.pdf_protect", None),
+        "audit_pdf_password_input": ("form.pdf_password", "form.pdf_password_help"),
     }
 
     def __init__(self, *args, **kwargs):
@@ -350,9 +354,11 @@ class LibreOXIEmailForm(forms.ModelForm):
                 "audit_email_time",
                 "audit_send_empty",
                 "audit_email_attach_pdf",
-                "audit_email_attach_csv",
+                "audit_pdf_protect",
+                "audit_pdf_password_input",
             ]
         )
+        self.fields["audit_pdf_protect"].initial = bool(self.instance.audit_pdf_password)
 
     def clean_audit_email_recipients(self):
         value = self.cleaned_data.get("audit_email_recipients", "") or ""
@@ -383,6 +389,8 @@ class LibreOXIEmailForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        if cleaned.get("audit_pdf_protect") and not cleaned.get("audit_pdf_password_input") and not self.instance.audit_pdf_password:
+            self.add_error("audit_pdf_password_input", tr("form.err_pdf_password", self.lang))
         if cleaned.get("smtp_auth") and not (cleaned.get("smtp_username") or "").strip():
             self.add_error("smtp_username", tr("form.err_username", self.lang))
         return cleaned
@@ -395,6 +403,10 @@ class LibreOXIEmailForm(forms.ModelForm):
         if not instance.smtp_auth:
             instance.smtp_username = ""
             instance.smtp_password = ""
+        if not self.cleaned_data.get("audit_pdf_protect"):
+            instance.audit_pdf_password = ""
+        elif self.cleaned_data.get("audit_pdf_password_input"):
+            instance.audit_pdf_password = self.cleaned_data["audit_pdf_password_input"]
         if commit:
             instance.save()
         return instance

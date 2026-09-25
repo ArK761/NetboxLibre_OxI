@@ -91,22 +91,23 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ "ui.cancel"|tr:lang }}"></button>
       </div>
       <div class="modal-body">
-        <p class="mb-1"><strong>{{ period_label }}</strong></p>
-        <p class="mb-3"><span class="text-muted">{{ "ui.send_to"|tr:lang }}:</span> {{ recipients }}</p>
-        <div class="fw-bold mb-2">{{ "ui.attachments"|tr:lang }}</div>
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="attach" value="pdf" id="libreoxi-attach-pdf" {% if default_attach_pdf %}checked{% endif %}>
-          <label class="form-check-label" for="libreoxi-attach-pdf">PDF</label>
+        <p class="mb-3"><strong>{{ period_label }}</strong></p>
+        {% include "netbox_libreoxi/inc/recipients_pick.html" with prefix="libreoxi-send" %}
+        <hr>
+        <div class="form-text mb-2">{{ "ui.body_hint"|tr:lang }}</div>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" name="attach_pdf" id="libreoxi-attach-pdf" {% if default_attach_pdf %}checked{% endif %}>
+          <label class="form-check-label" for="libreoxi-attach-pdf">{{ "ui.attach_pdf"|tr:lang }}</label>
         </div>
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="attach" value="csv" id="libreoxi-attach-csv" {% if default_attach_csv %}checked{% endif %}>
-          <label class="form-check-label" for="libreoxi-attach-csv">CSV (Excel)</label>
+        <div class="form-check form-switch mt-2 libreoxi-pdf-only">
+          <input class="form-check-input" type="checkbox" role="switch" name="pdf_protect" id="libreoxi-pdf-protect" {% if pdf_password_set %}checked{% endif %}>
+          <label class="form-check-label" for="libreoxi-pdf-protect">{{ "form.pdf_protect"|tr:lang }}</label>
         </div>
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="attach" value="html" id="libreoxi-attach-html">
-          <label class="form-check-label" for="libreoxi-attach-html">HTML</label>
+        <div class="mt-2 libreoxi-pdf-only libreoxi-pdf-pass">
+          <label class="form-label" for="libreoxi-pdf-password">{{ "ui.pdf_password"|tr:lang }}</label>
+          <input class="form-control" type="password" name="pdf_password" id="libreoxi-pdf-password" autocomplete="new-password">
+          <div class="form-text">{{ "ui.pdf_password_help"|tr:lang }}{% if pdf_password_set %} {{ "ui.pdf_password_saved"|tr:lang }}{% endif %}</div>
         </div>
-        <div class="form-text mt-2">{{ "ui.attach_none_hint"|tr:lang }}</div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ "ui.cancel"|tr:lang }}</button>
@@ -129,6 +130,15 @@
     };
     period.addEventListener('change', update);
     update();
+    const attach = document.getElementById('libreoxi-attach-pdf');
+    const protect = document.getElementById('libreoxi-pdf-protect');
+    const updatePdf = () => {
+      document.querySelectorAll('.libreoxi-pdf-only').forEach((el) => { el.style.display = attach && attach.checked ? '' : 'none'; });
+      document.querySelectorAll('.libreoxi-pdf-pass').forEach((el) => { el.style.display = attach && attach.checked && protect && protect.checked ? '' : 'none'; });
+    };
+    attach?.addEventListener('change', updatePdf);
+    protect?.addEventListener('change', updatePdf);
+    updatePdf();
   })();
 </script>
 {% endif %}

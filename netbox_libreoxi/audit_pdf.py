@@ -26,7 +26,14 @@ def _register_fonts() -> None:
     pdfmetrics.registerFont(TTFont(FONT_BOLD, str(FONT_DIR / "DejaVuSans-Bold.ttf")))
 
 
-def build_pdf(settings, report: dict, subject: str) -> bytes:
+def _encryption(password: str):
+    from reportlab.lib.pdfencrypt import StandardEncryption
+
+    return StandardEncryption(password, canPrint=1, canModify=0, canCopy=1, canAnnotate=0, strength=128)
+
+
+def build_pdf(settings, report: dict, subject: str, password: str | None = None) -> bytes:
+    """Render the audit as PDF; with a password the PDF is encrypted (AES/RC4 128-bit, printing allowed)."""
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4, landscape
@@ -126,6 +133,7 @@ def build_pdf(settings, report: dict, subject: str) -> bytes:
         bottomMargin=14 * mm,
         title=subject,
         author="NetBox LibreOXI",
+        **({"encrypt": _encryption(password)} if password else {}),
     )
     document.build(story, onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()

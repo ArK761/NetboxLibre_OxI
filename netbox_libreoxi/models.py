@@ -48,6 +48,7 @@ class LibreOXISettings(models.Model):
     smtp_auto_tls = models.BooleanField(default=False)
     smtp_auth = models.BooleanField(default=False)
     language = models.CharField(max_length=8, default="en")
+    audit_pdf_password = models.TextField(blank=True, default="")
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

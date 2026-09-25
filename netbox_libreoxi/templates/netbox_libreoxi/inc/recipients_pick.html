@@ -1,0 +1,11 @@
+{% load libreoxi_tags %}
+<div class="fw-bold mb-2">{{ "ui.recipients_pick"|tr:lang }}</div>
+{% for address in recipient_list %}
+  <div class="form-check">
+    <input class="form-check-input" type="checkbox" name="to" value="{{ address }}" id="{{ prefix }}-to-{{ forloop.counter }}" checked>
+    <label class="form-check-label" for="{{ prefix }}-to-{{ forloop.counter }}">{{ address }}</label>
+  </div>
+{% endfor %}
+<label class="form-label mt-2" for="{{ prefix }}-to-extra">{{ "ui.other_addresses"|tr:lang }}</label>
+<input class="form-control" type="text" name="to_extra" id="{{ prefix }}-to-extra" placeholder="name@example.com">
+<div class="form-text">{{ "ui.other_addresses_help"|tr:lang }}</div>

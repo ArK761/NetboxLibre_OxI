@@ -118,7 +118,8 @@ The audit can also be downloaded as **PDF** and sent by e-mail from the Audit pa
 
 - recipients: one or more addresses (a group address works too);
 - frequency: daily (previous day), weekly (last 7 days, on a chosen weekday) or monthly (previous month, on the 1st);
-- send time, optional e-mail when there were no changes, PDF and/or CSV attachment;
+- send time, optional e-mail when there were no changes, optional PDF attachment, optionally protected with a password
+  (the audit is always in the e-mail body);
 - Email Options like in LibreNMS: from name, from address, SMTP server, port, timeout, encryption
   (Disabled / SSL / TLS-STARTTLS), Auto TLS and optional SMTP authentication. The plugin talks to the SMTP server
   directly, independently of NetBox's own e-mail configuration. When the SMTP server is empty, NetBox's `EMAIL`
@@ -131,7 +132,9 @@ PDF generation uses `reportlab` (installed automatically) and the bundled DejaVu
 **Language:** LibreOXI Settings → *Language* selects English (default), Slovak, Czech or German for the audit
 (e-mail, PDF, CSV, preview) and for the Audit and E-mail pages.
 
-When sending an audit from the Audit page, a dialog asks which attachments (PDF, CSV, HTML or none) to include.
+When sending an audit from the Audit page, a dialog asks for the recipients (ticked from the configured list and/or
+other addresses), whether to attach the PDF and whether to protect it with a password. The test e-mail on the E-mail page
+also asks for the recipients.
 
 The audit describes changes in plain language, e.g.
 `VLAN 201 "## TEST ##" was added (on bridge1, tagged on ports sfp-sfpplus2, sfp-sfpplus1).`

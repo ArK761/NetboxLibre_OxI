@@ -367,6 +367,22 @@ def _audit_period(request, settings):
     return local_midnight(today), local_midnight(today + timedelta(days=1)), tr("period.today", lang, day=today.strftime(date_format))
 
 
+def _chosen_recipients(request, settings, lang):
+    """Recipients ticked in a send dialog plus additional typed addresses; None (with a message) when invalid."""
+    configured = audit.recipients(settings)
+    chosen = [address for address in request.POST.getlist("to") if address in configured]
+    try:
+        extra = audit.parse_addresses(request.POST.get("to_extra", ""))
+    except ValueError as exc:
+        messages.error(request, tr("ui.invalid_address", lang, address=exc))
+        return None
+    to = chosen + [address for address in extra if address not in chosen]
+    if not to:
+        messages.error(request, tr("ui.no_recipient_selected", lang))
+        return None
+    return to
+
+
 def audit_view(request):
     if not request.user.is_authenticated:
         return redirect(f"{reverse('login')}?next={request.path}")
@@ -381,11 +397,21 @@ def audit_view(request):
     since, until, label = _audit_period(request, settings)
     lang = language_of(settings)
     if request.method == "POST" and request.POST.get("action") == "send_email":
-        attachments = [kind for kind in request.POST.getlist("attach") if kind in ("pdf", "csv", "html")]
+        attach_pdf = request.POST.get("attach_pdf") == "on"
+        protect = request.POST.get("pdf_protect") == "on"
+        password = (request.POST.get("pdf_password") or settings.audit_pdf_password) if protect else ""
+        if attach_pdf and protect and not password:
+            messages.error(request, tr("form.err_pdf_password", lang))
+            return redirect(f"{request.path}?{request.GET.urlencode()}")
+        to = _chosen_recipients(request, settings, lang)
+        if to is None:
+            return redirect(f"{request.path}?{request.GET.urlencode()}")
         try:
-            result = audit.send_audit(settings, devices, since, until, label, force=True, attachments=attachments)
+            result = audit.send_audit(
+                settings, devices, since, until, label, force=True, to=to, attach_pdf=attach_pdf, pdf_password=password,
+            )
             if result["sent"]:
-                messages.success(request, tr("ui.audit_sent", lang, period=label, recipients=", ".join(audit.recipients(settings))))
+                messages.success(request, tr("ui.audit_sent", lang, period=label, recipients=", ".join(to)))
             else:
                 messages.warning(request, result["reason"])
         except Exception as exc:
@@ -402,9 +428,10 @@ def audit_view(request):
         "period_label": label,
         "generated": "generate" in request.GET or "export" in request.GET,
         "recipients": ", ".join(audit.recipients(settings)),
+        "recipient_list": audit.recipients(settings),
+        "pdf_password_set": bool(settings.audit_pdf_password),
         "lang": lang,
         "default_attach_pdf": settings.audit_email_attach_pdf,
-        "default_attach_csv": settings.audit_email_attach_csv,
         "min_severity": audit.severity_label(settings.audit_min_severity, lang),
     }
     if not context["generated"]:
@@ -444,9 +471,12 @@ def email_view(request):
 
     lang = language_of(instance)
     if request.method == "POST" and request.POST.get("action") == "test_email":
+        to = _chosen_recipients(request, instance, lang)
+        if to is None:
+            return redirect("plugins:netbox_libreoxi:email")
         try:
-            audit.send_test_email(instance)
-            messages.success(request, tr("ui.test_sent", lang, recipients=", ".join(audit.recipients(instance))))
+            audit.send_test_email(instance, to=to)
+            messages.success(request, tr("ui.test_sent", lang, recipients=", ".join(to)))
         except Exception as exc:
             messages.error(request, tr("ui.test_failed", lang, error=exc))
         return redirect("plugins:netbox_libreoxi:email")
@@ -468,6 +498,8 @@ def email_view(request):
             "recipients": ", ".join(audit.recipients(instance)),
             "last_sent": format_timestamp(last_sent.isoformat(), instance) if last_sent else "",
             "password_set": bool(instance.smtp_password),
+            "recipient_list": audit.recipients(instance),
+            "pdf_password_set": bool(instance.audit_pdf_password),
             "lang": lang,
         },
     )
