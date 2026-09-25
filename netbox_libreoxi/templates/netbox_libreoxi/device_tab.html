@@ -51,6 +51,26 @@
 
         <script>
           (() => {
+            const compareButton = document.getElementById('libreoxi-compare');
+            const revisions = Array.from(document.querySelectorAll('.libreoxi-revision'));
+            const updateCompare = () => {
+              const selected = revisions.filter((item) => item.checked);
+              if (compareButton) {
+                compareButton.textContent = `Compare selected (${selected.length}/2)`;
+                compareButton.disabled = selected.length !== 2;
+              }
+            };
+            revisions.forEach((item) => item.addEventListener('change', updateCompare));
+            compareButton?.addEventListener('click', () => {
+              const selected = revisions.filter((item) => item.checked).map((item) => item.value);
+              if (selected.length !== 2) return;
+              const url = new URL("{% url 'plugins:netbox_libreoxi:compare_config' device.pk %}", window.location.origin);
+              url.searchParams.set('old', selected[0]);
+              url.searchParams.set('new', selected[1]);
+              window.location.href = url.toString();
+            });
+            updateCompare();
+
             const countdown = document.getElementById('libreoxi-countdown'); const lastCheck = document.getElementById('libreoxi-last-check'); let refreshPending = false; let seconds = Number(countdown?.dataset.seconds || 0);
             const render = () => { if (!countdown) return; if (seconds <= 0) { countdown.textContent = 'checking...'; return; } const days = Math.floor(seconds / 86400); const hours = Math.floor((seconds % 86400) / 3600); const minutes = Math.floor((seconds % 3600) / 60); const secs = seconds % 60; const parts = []; if (days) parts.push(`${days}d`); if (hours || days) parts.push(`${hours}h`); if (minutes || hours || days) parts.push(`${minutes}m`); parts.push(`${secs}s`); countdown.textContent = `in ${parts.join(' ')}`; };
             const checkForScheduledRefresh = async () => { if (refreshPending || !lastCheck) return; try { const response = await fetch(window.location.href, { method: 'GET', cache: 'no-store', headers: { 'X-Requested-With': 'XMLHttpRequest' } }); if (!response.ok) return; const html = await response.text(); const doc = new DOMParser().parseFromString(html, 'text/html'); const remoteLastCheck = doc.getElementById('libreoxi-last-check')?.dataset.value || ''; const localLastCheck = lastCheck.dataset.value || ''; if (remoteLastCheck && remoteLastCheck !== localLastCheck) { refreshPending = true; window.location.reload(); } } catch (error) {} };
