@@ -180,6 +180,12 @@ def _strip_quotes(value: str) -> str:
     return value.strip().strip('"').strip("'")
 
 
+def _key_values(line: str, raw: bool = False) -> dict[str, str]:
+    """Parse MikroTik style key=value pairs; quoted values may contain spaces."""
+    pairs = re.findall(r'([\w.-]+)=("[^"]*"|\S+)', line)
+    return {key: value if raw else _strip_quotes(value) for key, value in pairs}
+
+
 def _split_negation(line: str) -> tuple[bool, str]:
     for prefix in NEGATIONS:
         if line.startswith(prefix):
@@ -354,14 +360,17 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
         verb = "disabled" if new_neg else "enabled"
         return Change("modified", category, obj, f"{obj}: {label} {verb}", old_line, new_line)
     if "=" in old_line and "=" in new_line:  # MikroTik "add name=x vlan-id=10"
-        old_kv = dict(token.split("=", 1) for token in old_line.split() if "=" in token)
-        new_kv = dict(token.split("=", 1) for token in new_line.split() if "=" in token)
+        old_kv = _key_values(old_line)
+        new_kv = _key_values(new_line)
         diffs = [
             f'{name} changed "{old_kv.get(name, "")}" -> "{new_kv.get(name, "")}"'
             for name in sorted(old_kv.keys() | new_kv.keys())
             if old_kv.get(name) != new_kv.get(name)
         ]
         target = f"{obj} {key.split(' ', 1)[1]}" if " " in key else obj
+        vlan = new_kv.get("vlan-ids") or new_kv.get("vlan-id")
+        if vlan and old_kv.get("vlan-ids", old_kv.get("vlan-id")) == vlan:
+            category, target = "VLAN", f"VLAN {vlan}"
         return Change("modified", category, target, f"{target}: {', '.join(diffs)}", old_line, new_line)
     old_value, new_value = _value(old_line, key), _value(new_line, key)
     if label == "hostname":
@@ -393,6 +402,17 @@ def _single_line(action: str, category: str, obj: str, line: str, path: list[str
             kind = "Interface" if match.group(1) == "interfaces" else "VLAN"
             name = f"{kind} {_strip_quotes(match.group(2))}"
             return Change(action, kind, name, f"{name}: {action} \"{match.group(3)}\"", old, new)
+
+    kv = _key_values(line, raw=True)
+    vlan = kv.get("vlan-ids") or kv.get("vlan-id")
+    if vlan:  # MikroTik "/interface bridge vlan" or "/interface vlan" entry
+        details = [
+            f"{name} {kv[name]}"
+            for name in ("name", "bridge", "interface", "tagged", "untagged", "comment")
+            if name in kv
+        ]
+        suffix = f" ({', '.join(details)})" if details else ""
+        return Change(action, "VLAN", f"VLAN {vlan}", f"VLAN {vlan} {action}{suffix}", old, new)
 
     key = line_key(line)
     label = _attribute_label(key)
@@ -428,7 +448,7 @@ def compare(old_content: str, new_content: str) -> list[Change]:
     changes: list[Change] = []
     _section_changes([], old_tree.children, new_tree.children, changes)
     order = {"System": 0, "Interface": 1, "VLAN": 2, "Routing": 3, "Security": 4, "Section": 5}
-    changes.sort(key=lambda change: (order.get(change.category, 9), change.obj))
+    changes.sort(key=lambda change: (order.get(change.category, 9), change.obj, change.message))
     return changes
 
 

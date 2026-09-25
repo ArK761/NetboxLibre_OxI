@@ -4,7 +4,7 @@
   <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
       <strong>LibreOXI configuration comparison</strong>
-      <a class="btn btn-secondary btn-sm" href="{% url 'dcim:device_libreoxi' device.pk %}">Back to LibreOXI</a>
+      <a class="btn btn-danger btn-sm" href="{% url 'dcim:device_libreoxi' device.pk %}">&times; Close comparison</a>
     </div>
     <div class="card-body">
       <div class="row g-3 mb-3">
@@ -35,9 +35,9 @@
       </div>
 
       <div class="mb-3">
-        <strong>Older:</strong> <code>{{ old_name }}</code>
+        <strong>Older:</strong> <code>{{ old_display }}</code>
         <span class="mx-2">→</span>
-        <strong>Newer:</strong> <code>{{ new_name }}</code>
+        <strong>Newer:</strong> <code>{{ new_display }}</code>
       </div>
 
       <div class="card mb-3">
@@ -75,9 +75,20 @@
         {% endif %}
       </div>
 
-      <h6 class="mb-2">Line-by-line comparison</h6>
-      <div class="table-responsive libreoxi-diff">
+      <h6 class="mb-2">Changed lines (with 3 lines of context)</h6>
+      <div class="table-responsive libreoxi-diff mb-3">
         {{ diff_html }}
+      </div>
+
+      <details class="mb-3">
+        <summary class="btn btn-outline-secondary btn-sm">Show full configuration comparison</summary>
+        <div class="table-responsive libreoxi-diff mt-2">
+          {{ full_diff_html }}
+        </div>
+      </details>
+
+      <div class="text-end">
+        <a class="btn btn-danger btn-sm" href="{% url 'dcim:device_libreoxi' device.pk %}">&times; Close comparison</a>
       </div>
     </div>
   </div>
