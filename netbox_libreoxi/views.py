@@ -222,6 +222,10 @@ def compare_config(request, pk):
     old_name = request.GET.get("old", "").strip(); new_name = request.GET.get("new", "").strip()
     if not old_name or not new_name or old_name == new_name:
         return HttpResponse("Select two different configuration revisions.", status=400, content_type="text/plain")
+    # Always compare the older revision against the newer one, regardless of the
+    # order in which the revisions were selected. History filenames are UTC
+    # timestamps (sortable as text) and current.cfg is always the newest.
+    old_name, new_name = sorted((old_name, new_name), key=lambda name: (name == "current.cfg", name))
     try:
         old_content, _ = _load_revision(settings, device, old_name); new_content, _ = _load_revision(settings, device, new_name)
     except OSError as exc:
