@@ -15,7 +15,7 @@ from utilities.views import ViewTab, register_model_view
 
 from . import audit
 from .config_changes import compare as compare_changes, config_author, summary as change_summary
-from .forms import LibreOXISettingsForm
+from .forms import LibreOXIEmailForm, LibreOXISettingsForm
 from .models import LibreOXISettings
 from .oxi import fetch_device, monitored_devices
 from .storage import device_dir, list_history, read_current
@@ -317,13 +317,7 @@ def settings_view(request):
     if request.method == "POST":
         form = LibreOXISettingsForm(request.POST, instance=instance)
         if form.is_valid():
-            instance = form.save(); messages.success(request, "LibreOXI settings saved. New storage path is used immediately by device views and refresh jobs.")
-            if request.POST.get("action") == "test_email":
-                try:
-                    audit.send_test_email(instance)
-                    messages.success(request, f"Testovací e-mail bol odoslaný na: {', '.join(audit.recipients(instance))}.")
-                except Exception as exc:
-                    messages.error(request, f"Testovací e-mail sa nepodarilo odoslať: {exc}")
+            form.save(); messages.success(request, "LibreOXI settings saved. New storage path is used immediately by device views and refresh jobs.")
             return redirect("plugins:netbox_libreoxi:settings")
     else: form = LibreOXISettingsForm(instance=instance)
     return render(request, "netbox_libreoxi/settings.html", {"form": form})
@@ -435,4 +429,41 @@ def audit_view(request):
 
     context.update({"report": report, "audit_subject": subject, "audit_html": mark_safe(html), "query": request.GET.urlencode()})
     return render(request, "netbox_libreoxi/audit.html", context)
+
+
+def email_view(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('login')}?next={request.path}")
+    instance = LibreOXISettings.objects.first()
+    if instance is None:
+        messages.warning(request, "Najprv uložte LibreOXI Settings.")
+        return redirect("plugins:netbox_libreoxi:settings")
+
+    if request.method == "POST" and request.POST.get("action") == "test_email":
+        try:
+            audit.send_test_email(instance)
+            messages.success(request, f"Testovací e-mail bol odoslaný na: {', '.join(audit.recipients(instance))}.")
+        except Exception as exc:
+            messages.error(request, f"Testovací e-mail sa nepodarilo odoslať: {exc}")
+        return redirect("plugins:netbox_libreoxi:email")
+
+    if request.method == "POST":
+        form = LibreOXIEmailForm(request.POST, instance=instance)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Nastavenie e-mailu bolo uložené.")
+            return redirect("plugins:netbox_libreoxi:email")
+    else:
+        form = LibreOXIEmailForm(instance=instance)
+    last_sent = audit.read_last_sent(instance)
+    return render(
+        request,
+        "netbox_libreoxi/email.html",
+        {
+            "form": form,
+            "recipients": ", ".join(audit.recipients(instance)),
+            "last_sent": format_timestamp(last_sent.isoformat(), instance) if last_sent else "",
+            "password_set": bool(instance.smtp_password),
+        },
+    )
 

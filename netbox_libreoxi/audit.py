@@ -626,54 +626,89 @@ WEEKDAYS = (
     (6, "Nedeľa"),
 )
 SMTP_SECURITY = (
-    ("starttls", "STARTTLS (zvyčajne port 587)"),
-    ("ssl", "SSL/TLS (zvyčajne port 465)"),
-    ("none", "Bez šifrovania (zvyčajne port 25)"),
+    ("none", "Disabled (zvyčajne port 25)"),
+    ("ssl", "SSL (zvyčajne port 465)"),
+    ("starttls", "TLS / STARTTLS (zvyčajne port 587)"),
 )
 
 
-def smtp_connection(settings):
-    """SMTP connection from the plugin settings, or NetBox's own EMAIL settings when no host is set."""
-    from django.core.mail import get_connection
-
-    if not (getattr(settings, "smtp_host", "") or "").strip():
-        return get_connection()
-    security = getattr(settings, "smtp_security", "starttls")
-    return get_connection(
-        "django.core.mail.backends.smtp.EmailBackend",
-        host=settings.smtp_host.strip(),
-        port=settings.smtp_port or (465 if security == "ssl" else 587),
-        username=settings.smtp_username or None,
-        password=settings.smtp_password or None,
-        use_tls=security == "starttls",
-        use_ssl=security == "ssl",
-        timeout=30,
-    )
-
-
 def from_address(settings) -> str:
+    from email.utils import formataddr
+
     from django.conf import settings as django_settings
 
-    return (
+    address = (
         (getattr(settings, "smtp_from", "") or "").strip()
         or getattr(django_settings, "DEFAULT_FROM_EMAIL", "")
         or getattr(django_settings, "SERVER_EMAIL", "")
     )
+    name = (getattr(settings, "smtp_from_name", "") or "").strip()
+    return formataddr((name, address)) if name and address and "<" not in address else address
+
+
+def _deliver(settings, message) -> None:
+    """Send a Django EmailMessage.
+
+    With an SMTP server configured in the plugin the message is sent directly with
+    smtplib (independent of NetBox's own e-mail configuration, which may use Django
+    MAILERS); without it, NetBox's default e-mail configuration is used.
+    """
+    import smtplib
+    import ssl
+    from email.utils import parseaddr
+
+    host = (getattr(settings, "smtp_host", "") or "").strip()
+    if not host:
+        message.send(fail_silently=False)
+        return
+
+    security = getattr(settings, "smtp_security", "none") or "none"
+    port = getattr(settings, "smtp_port", 0) or (465 if security == "ssl" else 587 if security == "starttls" else 25)
+    timeout = getattr(settings, "smtp_timeout", 10) or 10
+    context = ssl.create_default_context()
+    if security == "ssl":
+        server = smtplib.SMTP_SSL(host, port, timeout=timeout, context=context)
+    else:
+        server = smtplib.SMTP(host, port, timeout=timeout)
+    try:
+        server.ehlo()
+        if security == "starttls" or (
+            security == "none" and getattr(settings, "smtp_auto_tls", False) and server.has_extn("starttls")
+        ):
+            server.starttls(context=context)
+            server.ehlo()
+        if getattr(settings, "smtp_auth", False) and getattr(settings, "smtp_username", ""):
+            server.login(settings.smtp_username, getattr(settings, "smtp_password", "") or "")
+        envelope_from = parseaddr(message.from_email)[1] or message.from_email
+        server.sendmail(envelope_from, message.recipients(), message.message().as_bytes(linesep="\r\n"))
+    finally:
+        try:
+            server.quit()
+        except smtplib.SMTPException:
+            server.close()
 
 
 def send_test_email(settings, to: list[str] | None = None) -> None:
     from django.core.mail import EmailMessage
+    from django.utils import timezone
 
     to = to or recipients(settings)
     if not to:
         raise ValueError("Nie sú nastavení príjemcovia auditného e-mailu.")
-    EmailMessage(
-        subject="[LibreOXI] Testovací e-mail",
-        body="Toto je testovací e-mail z NetBox LibreOXI. Nastavenie odosielania auditu funguje.",
-        from_email=from_address(settings),
-        to=to,
-        connection=smtp_connection(settings),
-    ).send(fail_silently=False)
+    now = timezone.localtime().strftime(getattr(settings, "datetime_format", "%d.%m.%Y %H:%M:%S"))
+    body = (
+        "Toto je testovací e-mail z pluginu NetBox LibreOXI.\n"
+        "This is a test e-mail from the NetBox LibreOXI plugin.\n\n"
+        f"Odoslané / Sent: {now}\n"
+        f"SMTP server: {(getattr(settings, 'smtp_host', '') or '').strip() or 'nastavenie NetBoxu (EMAIL)'}\n"
+        f"Príjemcovia / Recipients: {', '.join(to)}\n\n"
+        "Ak ste tento e-mail dostali, odosielanie auditu zmien konfigurácie je nastavené správne.\n"
+        "If you received this e-mail, the configuration change audit e-mail is set up correctly."
+    )
+    message = EmailMessage(
+        subject="[LibreOXI] Testovací e-mail / Test e-mail", body=body, from_email=from_address(settings), to=to
+    )
+    _deliver(settings, message)
 
 
 def send_audit(settings, devices, since, until, label: str, force: bool = False, to: list[str] | None = None) -> dict:
@@ -693,9 +728,7 @@ def send_audit(settings, devices, since, until, label: str, force: bool = False,
         return {"sent": False, "total": 0, "reason": "Žiadne zmeny na odoslanie."}
 
     subject, text, html = render_report(settings, report)
-    message = EmailMultiAlternatives(
-        subject=subject, body=text, from_email=from_address(settings), to=to, connection=smtp_connection(settings)
-    )
+    message = EmailMultiAlternatives(subject=subject, body=text, from_email=from_address(settings), to=to)
     message.attach_alternative(html, "text/html")
     stamp = timezone.localtime().strftime("%Y-%m-%d")
     if getattr(settings, "audit_email_attach_pdf", True):
@@ -704,7 +737,7 @@ def send_audit(settings, devices, since, until, label: str, force: bool = False,
         message.attach(f"libreoxi-audit_{stamp}.pdf", build_pdf(settings, report, subject), "application/pdf")
     if getattr(settings, "audit_email_attach_csv", False):
         message.attach(f"libreoxi-audit_{stamp}.csv", report_csv(settings, report).encode("utf-8"), "text/csv")
-    message.send(fail_silently=False)
+    _deliver(settings, message)
     return {"sent": True, "total": report["total"], "reason": ""}
 
 

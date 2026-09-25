@@ -114,14 +114,16 @@ or HTML.
 
 The audit can also be downloaded as **PDF** and sent by e-mail from the Audit page (**Odoslať e-mailom**).
 
-**Automatic audit e-mail** (LibreOXI Settings → *Odosielanie auditu e-mailom*):
+**Automatic audit e-mail** (separate page **LibreOXI → E-mail**):
 
 - recipients: one or more addresses (a group address works too);
 - frequency: daily (previous day), weekly (last 7 days, on a chosen weekday) or monthly (previous month, on the 1st);
 - send time, optional e-mail when there were no changes, PDF and/or CSV attachment;
-- SMTP server, port, security (STARTTLS / SSL / none), user, password and sender. When the SMTP server is empty,
-  NetBox's own `EMAIL` settings from `configuration.py` are used;
-- **Uložiť a odoslať testovací e-mail** verifies the e-mail settings.
+- Email Options like in LibreNMS: from name, from address, SMTP server, port, timeout, encryption
+  (Disabled / SSL / TLS-STARTTLS), Auto TLS and optional SMTP authentication. The plugin talks to the SMTP server
+  directly, independently of NetBox's own e-mail configuration. When the SMTP server is empty, NetBox's `EMAIL`
+  settings from `configuration.py` are used;
+- **Poslať testovací e-mail** sends a test e-mail using the saved settings.
 
 The e-mail is sent by the NetBox background worker (`netbox-rq`); results are written to the LibreOXI log.
 PDF generation uses `reportlab` (installed automatically) and the bundled DejaVu Sans font (see `fonts/LICENSE-DejaVu.txt`).

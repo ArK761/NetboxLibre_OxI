@@ -1,0 +1,79 @@
+{% extends 'base/layout.html' %}
+
+{% block title %}LibreOXI E-mail{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-xl-8">
+    <form method="post" id="libreoxi-email-form">
+      {% csrf_token %}
+
+      <div class="card mb-3">
+        <div class="card-header"><h5 class="card-title mb-0">Email Options</h5></div>
+        <div class="card-body">
+          {% for field in form %}
+            {% if field.name|slice:":5" == "smtp_" %}
+              {% include "netbox_libreoxi/inc/email_field.html" %}
+            {% endif %}
+          {% endfor %}
+          {% if password_set %}
+            <div class="form-text libreoxi-auth">Heslo je uložené.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header"><h5 class="card-title mb-0">Odosielanie auditu</h5></div>
+        <div class="card-body">
+          {% for field in form %}
+            {% if field.name|slice:":5" != "smtp_" %}
+              {% include "netbox_libreoxi/inc/email_field.html" %}
+            {% endif %}
+          {% endfor %}
+          {% if last_sent %}
+            <div class="form-text">Posledné automatické odoslanie: {{ last_sent }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Uložiť</button>
+    </form>
+
+    <div class="card mt-3">
+      <div class="card-body d-flex flex-wrap align-items-center gap-3">
+        <form method="post" class="mb-0">
+          {% csrf_token %}
+          <button type="submit" name="action" value="test_email" class="btn btn-outline-primary"
+                  {% if not recipients %}disabled{% endif %}>Poslať testovací e-mail</button>
+        </form>
+        <div class="text-muted small">
+          {% if recipients %}
+            Pošle sa na: {{ recipients }} (použije sa uložené nastavenie).
+          {% else %}
+            Najprv zadajte a uložte príjemcov auditu.
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const toggle = (checkboxId, selector) => {
+      const box = document.getElementById(checkboxId);
+      if (!box) return;
+      const update = () => document.querySelectorAll(selector).forEach((el) => { el.style.display = box.checked ? '' : 'none'; });
+      box.addEventListener('change', update);
+      update();
+    };
+    toggle('id_smtp_auth', '.libreoxi-auth');
+    const frequency = document.getElementById('id_audit_email_frequency');
+    if (frequency) {
+      const update = () => document.querySelectorAll('.libreoxi-weekday').forEach((el) => { el.style.display = frequency.value === 'weekly' ? '' : 'none'; });
+      frequency.addEventListener('change', update);
+      update();
+    }
+  })();
+</script>
+{% endblock %}

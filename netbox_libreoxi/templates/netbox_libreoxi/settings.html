@@ -17,10 +17,6 @@
           {% for field in form %}
             {% if field.name == "audit_severity_inventory" %}
               <h5 class="mt-4 mb-3 border-bottom pb-2">Audit pre manažéra kybernetickej bezpečnosti</h5>
-            {% elif field.name == "audit_email_enabled" %}
-              <h5 class="mt-4 mb-3 border-bottom pb-2">Odosielanie auditu e-mailom</h5>
-            {% elif field.name == "smtp_host" %}
-              <h5 class="mt-4 mb-3 border-bottom pb-2">E-mailový (SMTP) server</h5>
             {% endif %}
             <div class="mb-3">
               <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
@@ -35,7 +31,6 @@
           {% endfor %}
 
           <button type="submit" class="btn btn-primary">Apply</button>
-          <button type="submit" name="action" value="test_email" class="btn btn-outline-secondary ms-2">Uložiť a odoslať testovací e-mail</button>
         </form>
       </div>
     </div>
