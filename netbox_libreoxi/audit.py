@@ -459,6 +459,7 @@ def _report_from_entries(settings, entries: list[dict], since: datetime, until: 
             device["changes"].append(
                 {
                     **change,
+                    "author": entry.get("author") or "",
                     "when": entry["when"],
                     "severity": severity,
                     "severity_label": SEVERITY_LABEL[severity],
@@ -520,7 +521,10 @@ def render_report(settings, report: dict) -> tuple[str, str, str]:
     """Return (subject, plain text, HTML) of the audit e-mail."""
     fields = [field for field in (getattr(settings, "audit_fields", None) or DEFAULT_AUDIT_FIELDS)]
     labels = dict(AUDIT_FIELDS)
-    period = f"{_format_time(report['since'], settings)} - {_format_time(report['until'], settings)}"
+    if report.get("period_label"):
+        period = report["period_label"]
+    else:
+        period = f"{_format_time(report['since'], settings)} - {_format_time(report['until'], settings)}"
     counts = report["counts"]
     summary = ", ".join(f"{SEVERITY_PLURAL[key]}: {counts[key]}" for key, _label in reversed(SEVERITIES) if counts[key])
 
@@ -661,3 +665,94 @@ def default_window_start(settings, until: datetime) -> datetime:
     if last_sent is None:
         return until - timedelta(hours=24)
     return max(last_sent, earliest)
+
+
+# --------------------------------------------------------------------------
+# Audit generated on demand from the stored configuration history
+# --------------------------------------------------------------------------
+
+def revision_time(name: str) -> datetime | None:
+    """UTC time of a history file named "YYYY-mm-dd_HH-MM-SS.cfg"."""
+    try:
+        return datetime.strptime(name.removesuffix(".cfg"), "%Y-%m-%d_%H-%M-%S").replace(tzinfo=dt_timezone.utc)
+    except ValueError:
+        return None
+
+
+def collect_entries(settings, devices, since: datetime | None, until: datetime | None) -> list[dict]:
+    """Compare consecutive stored revisions of every device and return audit entries.
+
+    A revision is reported when it was stored within [since, until) and an older
+    revision exists to compare it with (the very first backup is not a change).
+    """
+    from .config_changes import compare, config_author
+    from .storage import list_history
+
+    entries = []
+    for device in devices:
+        try:
+            files = [path for path in list_history(settings.storage_root, device.pk) if path.name != "current.cfg"]
+        except OSError:
+            continue
+        revisions = sorted(
+            ((revision_time(path.name), path) for path in files if revision_time(path.name) is not None),
+            key=lambda item: item[0],
+        )
+        ip = str(device.primary_ip4.address.ip) if getattr(device, "primary_ip4", None) else ""
+        previous_content = None
+        for when, path in revisions:
+            in_period = (since is None or when >= since) and (until is None or when < until)
+            if not in_period and (until is not None and when >= until):
+                break
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if in_period and previous_content is not None:
+                changes = compare(previous_content, content)
+                if changes:
+                    entries.append(
+                        {
+                            "device": str(device),
+                            "ip": ip,
+                            "when": when,
+                            "author": config_author(content),
+                            "changes": [
+                                {
+                                    "category": classify(change),
+                                    "action": change.action,
+                                    "object": change.obj,
+                                    "message": mask_secrets(change.message),
+                                    "old": mask_secrets(change.old),
+                                    "new": mask_secrets(change.new),
+                                }
+                                for change in changes
+                            ],
+                        }
+                    )
+            previous_content = content
+    return entries
+
+
+def report_csv(settings, report: dict) -> str:
+    """Semicolon separated CSV (opens directly in Excel with Slovak locale)."""
+    import csv
+    import io
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow(["Zariadenie", "IP", "Čas", "Závažnosť", "Kategória", "Zmena", "Zmenu uložil"])
+    for device in report["devices"]:
+        for change in device["changes"]:
+            writer.writerow(
+                [
+                    device["name"],
+                    device["ip"],
+                    _format_time(change["when"], settings),
+                    change["severity_label"],
+                    change["category_label"],
+                    audit_text(change),
+                    change.get("author", ""),
+                ]
+            )
+    return "﻿" + buffer.getvalue()

@@ -320,3 +320,95 @@ def settings_view(request):
             form.save(); messages.success(request, "LibreOXI settings saved. New storage path is used immediately by device views and refresh jobs."); return redirect("plugins:netbox_libreoxi:settings")
     else: form = LibreOXISettingsForm(instance=instance)
     return render(request, "netbox_libreoxi/settings.html", {"form": form})
+
+
+def _audit_period(request, settings):
+    """Return (since, until, label) for the period selected on the Audit page (local time)."""
+    from datetime import date, timedelta
+
+    period = request.GET.get("period", "today")
+    now = django_timezone.localtime()
+
+    def local_midnight(day):
+        return django_timezone.make_aware(datetime(day.year, day.month, day.day))
+
+    def parse_day(value):
+        try:
+            return date.fromisoformat(value)
+        except (TypeError, ValueError):
+            return None
+
+    date_format = settings.datetime_format.split(" ")[0] if settings.datetime_format else "%d.%m.%Y"
+    today = now.date()
+    if period == "yesterday":
+        day = today - timedelta(days=1)
+        return local_midnight(day), local_midnight(today), f"Včera ({day.strftime(date_format)})"
+    if period == "day":
+        day = parse_day(request.GET.get("day")) or today
+        return local_midnight(day), local_midnight(day + timedelta(days=1)), f"Deň {day.strftime(date_format)}"
+    if period == "range":
+        start = parse_day(request.GET.get("from")) or today
+        end = parse_day(request.GET.get("to")) or today
+        if end < start:
+            start, end = end, start
+        return local_midnight(start), local_midnight(end + timedelta(days=1)), f"{start.strftime(date_format)} – {end.strftime(date_format)}"
+    if period == "last7":
+        start = today - timedelta(days=6)
+        return local_midnight(start), local_midnight(today + timedelta(days=1)), f"Posledných 7 dní ({start.strftime(date_format)} – {today.strftime(date_format)})"
+    if period == "all":
+        return None, None, "Celá uložená história"
+    return local_midnight(today), local_midnight(today + timedelta(days=1)), f"Dnes ({today.strftime(date_format)})"
+
+
+def audit_view(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('login')}?next={request.path}")
+    settings = LibreOXISettings.objects.first()
+    if not settings:
+        return render(request, "netbox_libreoxi/audit.html", {"settings": None})
+
+    devices = list(monitored_devices(settings))
+    selected_ids = [int(value) for value in request.GET.getlist("device") if value.isdigit()]
+    if selected_ids:
+        devices = [device for device in devices if device.pk in selected_ids]
+    since, until, label = _audit_period(request, settings)
+    context = {
+        "settings": settings,
+        "all_devices": list(monitored_devices(settings)),
+        "selected_ids": selected_ids,
+        "period": request.GET.get("period", "today"),
+        "day": request.GET.get("day", ""),
+        "date_from": request.GET.get("from", ""),
+        "date_to": request.GET.get("to", ""),
+        "period_label": label,
+        "generated": "generate" in request.GET or "export" in request.GET,
+        "min_severity": audit.SEVERITY_LABEL.get(settings.audit_min_severity, settings.audit_min_severity),
+    }
+    if not context["generated"]:
+        return render(request, "netbox_libreoxi/audit.html", context)
+
+    entries = audit.collect_entries(settings, devices, since, until)
+    report = audit._report_from_entries(
+        settings, entries, since or datetime.min.replace(tzinfo=timezone.utc), until or django_timezone.now()
+    )
+    report["period_label"] = label
+    subject, _text, html = audit.render_report(settings, report)
+
+    export = request.GET.get("export")
+    stamp = django_timezone.localtime().strftime("%Y-%m-%d_%H-%M")
+    if export == "csv":
+        response = HttpResponse(audit.report_csv(settings, report), content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="libreoxi-audit_{stamp}.csv"'
+        return response
+    if export == "html":
+        page = (
+            '<!doctype html><html lang="sk"><head><meta charset="utf-8">'
+            f"<title>{subject}</title></head><body style=\"background:#fff;margin:24px\">{html}</body></html>"
+        )
+        response = HttpResponse(page, content_type="text/html; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="libreoxi-audit_{stamp}.html"'
+        return response
+
+    context.update({"report": report, "audit_subject": subject, "audit_html": mark_safe(html), "query": request.GET.urlencode()})
+    return render(request, "netbox_libreoxi/audit.html", context)
+

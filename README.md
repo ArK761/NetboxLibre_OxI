@@ -106,6 +106,12 @@ Every detected change is assigned an audit category and a severity:
 | Descriptions and names | Low |
 | Other changes | Low |
 
+The **LibreOXI → Audit** page generates the audit for all monitored devices at once (or selected devices)
+for today, yesterday, the last 7 days, a specific day, a date range or the complete stored history. It is built
+from the stored configuration history by comparing consecutive revisions, so it also covers changes made before
+the audit feature was installed (within the configured retention). The report can be downloaded as CSV (Excel)
+or HTML.
+
 The audit report is written in Slovak and describes changes in plain language, e.g.
 `VLAN 201 "## TEST ##" bola pridaná (na bridge1, tagovaná na portoch sfp-sfpplus2, sfp-sfpplus1).`
 

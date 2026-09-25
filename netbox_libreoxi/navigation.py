@@ -11,13 +11,18 @@ logs_item = PluginMenuItem(
     link_text="Logs",
 )
 
+audit_item = PluginMenuItem(
+    link="plugins:netbox_libreoxi:audit",
+    link_text="Audit",
+)
+
 
 menu = PluginMenu(
     label="LibreOXI",
     groups=(
-        ("LibreOXI", (settings_item, logs_item)),
+        ("LibreOXI", (settings_item, logs_item, audit_item)),
     ),
     icon_class="mdi mdi-content-save-cog",
 )
 
-menu_items = (settings_item, logs_item)
+menu_items = (settings_item, logs_item, audit_item)
