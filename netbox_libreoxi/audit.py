@@ -22,6 +22,7 @@ SEVERITY_RANK = {key: rank for rank, (key, _) in enumerate(SEVERITIES)}
 SEVERITY_LABEL = dict(SEVERITIES)
 
 AUDIT_CATEGORIES = (
+    ("inventory", "Zariadenia v monitorovaní (nové zariadenie, prvá záloha konfigurácie)", "medium"),
     ("firewall", "Firewall / ACL / VPN (pravidlá, NAT, aliasy, VPN)", "critical"),
     ("access", "Používatelia a prístup (účty, heslá, AAA)", "critical"),
     ("management", "Správa zariadenia (SNMP, SSH/HTTP, logovanie, NTP, manažment VLAN)", "high"),
@@ -311,7 +312,7 @@ def audit_text(change: dict) -> str:
 
     match = re.match(r"^(.+?) (added|removed)(?: \((.*)\))?$", message)
     if match:
-        verb = "Pridané" if match.group(2) == "added" else "Odstránené"
+        verb = "Pridaná časť konfigurácie" if match.group(2) == "added" else "Odstránená časť konfigurácie"
         details = match.group(3) or ""
         details = re.sub(r",?\s*description [^,]*$", "", details) if match.group(1).startswith("Firewall > rule") else details
         return f"{verb}: {_object_name(match.group(1))}" + (f" ({_details(details)})." if details else ".")
@@ -469,7 +470,7 @@ def _report_from_entries(settings, entries: list[dict], since: datetime, until: 
 
     ordered = sorted(devices.values(), key=lambda device: device["name"].lower())
     for device in ordered:
-        device["changes"].sort(key=lambda change: (-SEVERITY_RANK[change["severity"]], change["when"]))
+        device["changes"].sort(key=lambda change: (change["when"], -SEVERITY_RANK[change["severity"]]))
     return {
         "devices": ordered,
         "counts": counts,
@@ -699,6 +700,29 @@ def collect_entries(settings, devices, since: datetime | None, until: datetime |
             key=lambda item: item[0],
         )
         ip = str(device.primary_ip4.address.ip) if getattr(device, "primary_ip4", None) else ""
+        first_seen = _first_seen(settings, device, revisions)
+        if first_seen is not None and (since is None or first_seen >= since) and (until is None or first_seen < until):
+            model = _device_model(device)
+            entries.append(
+                {
+                    "device": str(device),
+                    "ip": ip,
+                    "when": first_seen,
+                    "author": "",
+                    "changes": [
+                        {
+                            "category": "inventory",
+                            "action": "added",
+                            "object": str(device),
+                            "message": "Zariadenie bolo zaradené do monitorovania zmien konfigurácie (change management), "
+                            "uložená prvá záloha konfigurácie" + (f" ({model})." if model else "."),
+                            "old": "",
+                            "new": "",
+                        }
+                    ],
+                }
+            )
+
         previous_content = None
         for when, path in revisions:
             in_period = (since is None or when >= since) and (until is None or when < until)
@@ -732,6 +756,42 @@ def collect_entries(settings, devices, since: datetime | None, until: datetime |
                     )
             previous_content = content
     return entries
+
+
+def _device_model(device) -> str:
+    parts = []
+    device_type = getattr(device, "device_type", None)
+    if device_type is not None:
+        manufacturer = getattr(device_type, "manufacturer", None)
+        parts.append(" ".join(str(part) for part in (manufacturer, getattr(device_type, "model", "")) if part))
+    platform = getattr(device, "platform", None)
+    if platform:
+        parts.append(f"platforma {platform}")
+    return ", ".join(part for part in parts if part)
+
+
+def _first_seen(settings, device, revisions) -> datetime | None:
+    """When the device entered change monitoring (its first configuration backup)."""
+    from .storage import FIRST_BACKUP_MARKER, device_dir
+
+    try:
+        marker = device_dir(settings.storage_root, device.pk, create=False) / FIRST_BACKUP_MARKER
+        return datetime.fromisoformat(marker.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        pass
+    if not revisions:
+        return None
+    # Devices backed up before the marker existed: the oldest revision is the first
+    # backup only if retention cannot have deleted anything yet.
+    oldest = revisions[0][0]
+    retention_days = getattr(settings, "retention_days", 0) or 0
+    retention_revisions = getattr(settings, "retention_revisions", 0) or 0
+    now = datetime.now(dt_timezone.utc)
+    if retention_revisions and len(revisions) >= retention_revisions:
+        return None
+    if retention_days and oldest < now - timedelta(days=retention_days - 1):
+        return None
+    return oldest
 
 
 def report_csv(settings, report: dict) -> str:

@@ -114,7 +114,9 @@ class LibreOXISettingsForm(forms.ModelForm):
                 choices=SEVERITIES,
                 initial=severities[key],
             )
-        self.fields["audit_fields"].initial = self.instance.audit_fields or DEFAULT_AUDIT_FIELDS
+        # ModelForm takes initial values from the instance (an empty list for new
+        # settings), which would leave all checkboxes unticked; use the defaults.
+        self.initial["audit_fields"] = self.instance.audit_fields or DEFAULT_AUDIT_FIELDS
         self.fields["api_token"].initial = self.instance.api_token_encrypted
         self.fields["schedule_preset"].initial = ""
         if self.instance.pk:

@@ -415,14 +415,18 @@ def line_key(line: str) -> str:
     for index, token in enumerate(tokens):
         if token in VALUE_KEYWORDS:
             return " ".join(tokens[: index + 1])
-    if tokens[0] == "set" and len(tokens) > 2:  # Fortinet "set attr value..."
-        return " ".join(tokens[:2])
     if tokens[0] in ("add", "set") and any("=" in token for token in tokens):  # MikroTik
+        if tokens[0] == "set" and len(tokens) > 1 and "=" not in tokens[1]:
+            return f"set {tokens[1]}"  # "set 3 disabled=yes", "set ether1 comment=x"
         for prefix in ("name=", "numbers=", "vlan-ids=", "address=", "interface="):
             names = [token for token in tokens if token.startswith(prefix)]
             if names:
                 return f"{tokens[0]} {names[0]}"
+        if tokens[0] == "set":
+            return "set " + " ".join(token.split("=", 1)[0] for token in tokens[1:] if "=" in token)
         return tokens[0]
+    if tokens[0] == "set" and len(tokens) > 2:  # Fortinet "set attr value..."
+        return " ".join(tokens[:2])
     kv = [token.split("=", 1)[0] for token in tokens if "=" in token]
     if kv:
         return " ".join(tokens[:1] + kv)
@@ -505,6 +509,12 @@ def _summarise_section(node: Node) -> str:
         label = _attribute_label(key)
         if label in ("name", "description", "access VLAN", "IP address", "VLAN ID", "action", "interface"):
             details.append(f"{label} {_value(child.text, key)}")
+    if not details:
+        # Unknown section: show its first lines so the reader knows what was added.
+        lines = [child.text for child in node.children if not child.children][:2]
+        if lines:
+            more = len(node.children) - len(lines)
+            return f" ({'; '.join(lines)}" + (f"; +{more} more" if more > 0 else "") + ")"
     return f" ({', '.join(details[:3])})" if details else ""
 
 
@@ -617,7 +627,9 @@ def _modification(category: str, obj: str, key: str, old_line: str, new_line: st
             for name in sorted(old_kv.keys() | new_kv.keys())
             if old_kv.get(name) != new_kv.get(name)
         ]
-        target = f"{obj} {key.split(' ', 1)[1]}" if " " in key else obj
+        item = key.split(" ", 1)[1] if " " in key else ""
+        # "set 3 disabled=yes" -> item "3"; "set show-at-login=yes" -> item is an attribute, not an entry
+        target = obj if not item or f"{item.split()[0]}=" in old_line else f"{obj} [{item}]"
         vlan = new_kv.get("vlan-ids") or new_kv.get("vlan-id")
         if vlan and old_kv.get("vlan-ids", old_kv.get("vlan-id")) == vlan:
             category, target = "VLAN", f"VLAN {vlan}"
@@ -679,7 +691,7 @@ def _single_line(action: str, category: str, obj: str, line: str, path: list[str
 
     key = line_key(line)
     label = _attribute_label(key)
-    if label != key:
+    if label != key and not kv:
         return Change(action, category, obj, f'{obj}: {label} {action} "{_value(line, key)}"', old, new)
     return Change(action, category, obj, f'{obj}: line {action} "{line}"', old, new)
 
