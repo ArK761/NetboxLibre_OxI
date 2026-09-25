@@ -176,9 +176,7 @@ Besides device configurations, LibreOXI can audit changes made in NetBox itself.
 - **LibreOXI → NetBoxSelf Settings**: choose a NetBox object type (Device, Tenant, IP address, Prefix, IP range,
   VLAN, VLAN group, Virtual machine, …). The plugin lists its fields, including custom fields. Tick the fields to
   watch, set a severity for each and optionally the log message. *Object created* and *Object deleted* can be
-  watched too. Nothing is watched until you choose it. The fields are listed in the same order and sections as in the
-  NetBox edit form; custom fields follow in their NetBox order (group, weight). An overview on the same page shows
-  all watched object types and fields.
+  watched too. Nothing is watched until you choose it.
 - Log message placeholders: `{user}`, `{object}`, `{object_type}`, `{field}`, `{old}`, `{new}`, `{added}`,
   `{removed}`, `{changes}`, `{action}`. An empty message uses the default text in the selected language.
 - For lists (e.g. a multi-object custom field with 10 PCs, tags) and multi-line text, only the added and removed

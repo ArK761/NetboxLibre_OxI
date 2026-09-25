@@ -15,7 +15,7 @@
         <form method="get" class="row g-3 align-items-end">
           <div class="col-12 col-md-6">
             <label class="form-label" for="libreoxi-self-type">{{ "self.choose_type"|tr:lang }}</label>
-            <select class="form-select" name="type" id="libreoxi-self-type">
+            <select class="form-select" name="type" id="libreoxi-self-type" onchange="this.form.submit()">
               <option value="">{{ "self.choose_type_select"|tr:lang }}</option>
               {% for group, items in groups %}
                 <optgroup label="{{ group }}">
@@ -51,10 +51,9 @@
       <div class="card-body">
         <div class="small text-muted mb-1">{% trf "self.placeholders" lang placeholders=placeholders %}</div>
         <div class="small text-muted mb-3">{{ "self.long_hint"|tr:lang }}</div>
-        <form method="post" id="libreoxi-rules-form">
+        <form method="post">
           {% csrf_token %}
           <input type="hidden" name="action" value="rules">
-          <button type="submit" class="btn btn-primary mb-3">{{ "self.save_fields"|tr:lang }}</button>
           <input type="hidden" name="type" value="{{ selected }}">
           <div class="table-responsive">
             <table class="table table-sm align-middle">
@@ -88,37 +87,8 @@
               </tbody>
             </table>
           </div>
-          <div class="libreoxi-sticky-save py-2">
-            <button type="submit" class="btn btn-primary">{{ "self.save_fields"|tr:lang }}</button>
-          </div>
+          <button type="submit" class="btn btn-primary">{{ "self.save_rules"|tr:lang }}</button>
         </form>
-      </div>
-    </div>
-    {% endif %}
-
-    {% if overview %}
-    <div class="card mb-3">
-      <div class="card-header"><strong>{{ "self.overview"|tr:lang }}</strong></div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-sm align-top mb-0">
-            <tbody>
-              {% for item in overview %}
-              <tr>
-                <th style="width:14rem">
-                  {{ item.label }}
-                  <div class="small fw-normal"><a href="?type={{ item.key|urlencode }}">{{ "self.edit"|tr:lang }}</a></div>
-                </th>
-                <td>
-                  {% for rule in item.rules %}
-                    <span class="badge libreoxi-sev-{{ rule.severity }} me-1 mb-1" title="{{ rule.severity_label }}">{{ rule.label }}</span>
-                  {% endfor %}
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
     {% endif %}
@@ -144,47 +114,19 @@
           </div>
           <div class="form-text mb-3">{{ "self.include_email_help"|tr:lang }}</div>
           <div class="form-text mb-3">{{ "self.system_help"|tr:lang }}</div>
-          <button type="submit" class="btn btn-outline-primary">{{ "self.save_options"|tr:lang }}</button>
+          <button type="submit" class="btn btn-primary">{{ "self.save_rules"|tr:lang }}</button>
         </form>
       </div>
     </div>
   </div>
 </div>
-<style>
-  .libreoxi-sticky-save { position: sticky; bottom: 0; background: var(--tblr-bg-surface, var(--bs-body-bg)); border-top: 1px solid var(--tblr-border-color, #dee2e6); z-index: 2; }
-  .libreoxi-sev-low { background: #6c757d; color: #fff; }
-  .libreoxi-sev-medium { background: #d39e00; color: #fff; }
-  .libreoxi-sev-high { background: #fd7e14; color: #fff; }
-  .libreoxi-sev-critical { background: #dc3545; color: #fff; }
-</style>
 <script>
-  (() => {
-    const unsavedText = {{ unsaved_text|safe }};
-    const rulesForm = document.getElementById('libreoxi-rules-form');
-    let dirty = false;
-    if (rulesForm) {
-      rulesForm.addEventListener('input', () => { dirty = true; });
-      rulesForm.addEventListener('change', () => { dirty = true; });
-      rulesForm.addEventListener('submit', () => { dirty = false; });
-    }
-    document.querySelectorAll('[data-libreoxi-check]').forEach((link) => {
-      link.addEventListener('click', (event) => {
-        event.preventDefault();
-        const on = link.dataset.libreoxiCheck === '1';
-        document.querySelectorAll('.libreoxi-watch').forEach((box) => { box.checked = on; });
-        dirty = true;
-      });
+  document.querySelectorAll('[data-libreoxi-check]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      const on = link.dataset.libreoxiCheck === '1';
+      document.querySelectorAll('.libreoxi-watch').forEach((box) => { box.checked = on; });
     });
-    const typeSelect = document.getElementById('libreoxi-self-type');
-    const selectedType = typeSelect.value;
-    typeSelect.addEventListener('change', () => {
-      if (dirty && !window.confirm(unsavedText)) { typeSelect.value = selectedType; return; }
-      dirty = false;
-      typeSelect.form.submit();
-    });
-    window.addEventListener('beforeunload', (event) => {
-      if (dirty) { event.preventDefault(); event.returnValue = unsavedText; }
-    });
-  })();
+  });
 </script>
 {% endblock %}
