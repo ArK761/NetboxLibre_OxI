@@ -48,4 +48,5 @@ menu = PluginMenu(
     icon_class="mdi mdi-content-save-cog",
 )
 
-menu_items = (settings_item, logs_item, audit_item, email_item)
+# Only an own top-level menu. NetBox also reads a module-level "menu_items" and would list the same
+# items a second time under "Plugins", so that name must not be defined here.
