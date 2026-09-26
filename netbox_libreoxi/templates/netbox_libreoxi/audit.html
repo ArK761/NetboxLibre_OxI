@@ -71,8 +71,10 @@
       <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=pdf">{{ "ui.download_pdf"|tr:lang }}</a>
       <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=csv">{{ "ui.download_csv"|tr:lang }}</a>
       <a class="btn btn-outline-secondary btn-sm" href="?{{ query }}&export=html">{{ "ui.download_html"|tr:lang }}</a>
+      {% if can_send %}
       <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#libreoxi-send-modal"
               {% if not recipients %}disabled title="{{ "ui.set_recipients"|tr:lang }}"{% endif %}>{{ "ui.send_email"|tr:lang }}</button>
+      {% endif %}
     </div>
   </div>
   <div class="card-body">

@@ -5,6 +5,7 @@ from difflib import HtmlDiff, SequenceMatcher
 from urllib.parse import quote
 
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
@@ -20,8 +21,31 @@ from .config_changes import compare as compare_changes, config_author, summary a
 from .forms import LibreOXIEmailForm, LibreOXISettingsForm
 from .i18n import language_of, tr
 from .models import LibreOXISettings
-from .oxi import fetch_device, monitored_devices
+from .oxi import fetch_device, is_monitored, monitored_devices
 from .storage import device_dir, list_history, read_current
+
+
+# Viewing configurations, logs and the audit / managing the plugin (settings, e-mail, deleting revisions,
+# manual refresh, sending the audit). Superusers have both.
+VIEW_PERM = "netbox_libreoxi.view_libreoxisettings"
+MANAGE_PERM = "netbox_libreoxi.change_libreoxisettings"
+
+
+def _check(request, perm):
+    """None when allowed, otherwise the login redirect; raises 403 for a logged-in user without the permission."""
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('login')}?next={request.path}")
+    if not request.user.has_perm(perm):
+        raise PermissionDenied
+    return None
+
+
+NOT_MONITORED = "Device is not selected for LibreOXI monitoring."
+
+
+def _diff_table(old_lines, new_lines, fromdesc, todesc, lang, **options):
+    table = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, **options)
+    return table.replace("No Differences Found", tr("cmp.no_diff", lang)).replace("Empty File", tr("cmp.empty_file", lang))
 
 
 def format_timestamp(value, settings):
@@ -232,10 +256,12 @@ def _load_revision(settings, device, revision):
 @register_model_view(Device, name="libreoxi", path="libreoxi")
 class DeviceLibreOXIView(generic.ObjectView):
     queryset = Device.objects.all()
-    tab = ViewTab(label="LibreOXI", weight=500)
+    tab = ViewTab(label="LibreOXI", weight=500, permission=VIEW_PERM)
 
     def get(self, request, pk):
-        device = get_object_or_404(Device, pk=pk)
+        if (denied := _check(request, VIEW_PERM)) is not None:
+            return denied
+        device = get_object_or_404(Device.objects.restrict(request.user, "view"), pk=pk)
         settings = LibreOXISettings.objects.first()
         current = current_hash = selected_config = None
         selected_name = "current.cfg"
@@ -246,7 +272,7 @@ class DeviceLibreOXIView(generic.ObjectView):
         device_logs = []
         logs_more = False
         if settings:
-            monitored = monitored_devices(settings).filter(pk=device.pk).exists()
+            monitored = is_monitored(settings, device)
             try:
                 current, current_hash = read_current(settings.storage_root, device.pk)
                 directory = device_dir(settings.storage_root, device.pk, create=False)
@@ -270,15 +296,17 @@ class DeviceLibreOXIView(generic.ObjectView):
             "selected_config": selected_config, "selected_name": selected_name, "history": history,
             "last_check": last_check, "storage_error": storage_error, "device_logs": device_logs,
             "logs_more": logs_more, "more_limit": _page_size(request, "limit") + PAGE_MORE,
-            "lang": language_of(settings),
+            "lang": language_of(settings), "can_manage": request.user.has_perm(MANAGE_PERM),
         })
 
     def post(self, request, pk):
-        device = get_object_or_404(Device, pk=pk)
+        if (denied := _check(request, MANAGE_PERM)) is not None:
+            return denied
+        device = get_object_or_404(Device.objects.restrict(request.user, "view"), pk=pk)
         settings = LibreOXISettings.objects.first()
         if not settings:
             messages.error(request, tr("msg.not_configured", language_of(settings)))
-        elif not monitored_devices(settings).filter(pk=device.pk).exists():
+        elif not is_monitored(settings, device):
             messages.warning(request, tr("msg.not_monitored", language_of(settings)))
         else:
             result = fetch_device(settings, device)
@@ -290,10 +318,12 @@ class DeviceLibreOXIView(generic.ObjectView):
 
 
 def compare_config(request, pk):
-    device = get_object_or_404(Device, pk=pk)
+    if (denied := _check(request, VIEW_PERM)) is not None:
+        return denied
+    device = get_object_or_404(Device.objects.restrict(request.user, "view"), pk=pk)
     settings = LibreOXISettings.objects.first()
-    if not settings or not monitored_devices(settings).filter(pk=device.pk).exists():
-        return HttpResponse("Device is not selected for LibreOXI monitoring.", status=404, content_type="text/plain")
+    if not settings or not is_monitored(settings, device):
+        return HttpResponse(NOT_MONITORED, status=404, content_type="text/plain")
     old_name = request.GET.get("old", "").strip(); new_name = request.GET.get("new", "").strip()
     if not old_name or not new_name or old_name == new_name:
         return HttpResponse("Select two different configuration revisions.", status=400, content_type="text/plain")
@@ -314,11 +344,9 @@ def compare_config(request, pk):
         elif tag == "delete": removed += i2 - i1
         elif tag == "replace": removed += i2 - i1; added += j2 - j1; changed += 1
     fromdesc, todesc = format_revision(old_name, settings), format_revision(new_name, settings)
-    html_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, context=True, numlines=3)
-    full_diff = HtmlDiff(tabsize=4, wrapcolumn=140).make_table(old_lines, new_lines, fromdesc=fromdesc, todesc=todesc, context=False)
     lang = language_of(settings)
-    html_diff = html_diff.replace("No Differences Found", tr("cmp.no_diff", lang)).replace("Empty File", tr("cmp.empty_file", lang))
-    full_diff = full_diff.replace("No Differences Found", tr("cmp.no_diff", lang)).replace("Empty File", tr("cmp.empty_file", lang))
+    html_diff = _diff_table(old_lines, new_lines, fromdesc, todesc, lang, context=True, numlines=3)
+    full_diff = _diff_table(old_lines, new_lines, fromdesc, todesc, lang, context=False)
     changes = compare_changes(old_content, new_content)
     ip = str(device.primary_ip4.address.ip) if device.primary_ip4 else ""
     audit_report = audit.build_preview(
@@ -330,9 +358,11 @@ def compare_config(request, pk):
 
 
 def delete_revision(request, pk):
-    device = get_object_or_404(Device, pk=pk); settings = LibreOXISettings.objects.first()
+    if (denied := _check(request, MANAGE_PERM)) is not None:
+        return denied
+    device = get_object_or_404(Device.objects.restrict(request.user, "view"), pk=pk); settings = LibreOXISettings.objects.first()
     if request.method != "POST": return HttpResponse("POST required.", status=405, content_type="text/plain")
-    if not settings or not monitored_devices(settings).filter(pk=device.pk).exists(): return HttpResponse("Device is not selected for LibreOXI monitoring.", status=404, content_type="text/plain")
+    if not settings or not is_monitored(settings, device): return HttpResponse(NOT_MONITORED, status=404, content_type="text/plain")
     revision = request.POST.get("revision", "").strip()
     if revision in ("", "current.cfg"):
         messages.error(request, tr("msg.current_not_deletable", language_of(settings))); return redirect(reverse("dcim:device_libreoxi", kwargs={"pk": device.pk}))
@@ -345,14 +375,16 @@ def delete_revision(request, pk):
 
 
 def download_config(request, pk):
-    device = get_object_or_404(Device, pk=pk); settings = LibreOXISettings.objects.first()
-    if not settings or not monitored_devices(settings).filter(pk=device.pk).exists(): return HttpResponse("Device is not selected for LibreOXI monitoring.", status=404, content_type="text/plain")
+    if (denied := _check(request, VIEW_PERM)) is not None:
+        return denied
+    device = get_object_or_404(Device.objects.restrict(request.user, "view"), pk=pk); settings = LibreOXISettings.objects.first()
+    if not settings or not is_monitored(settings, device): return HttpResponse(NOT_MONITORED, status=404, content_type="text/plain")
     try:
-        directory = device_dir(settings.storage_root, device.pk, create=False); revision = request.GET.get("revision", "").strip()
+        revision = request.GET.get("revision", "").strip()
         if revision:
-            history = {p.name for p in list_history(settings.storage_root, device.pk)}
-            if revision not in history or Path(revision).name != revision: return HttpResponse("Configuration revision not found.", status=404, content_type="text/plain")
-            current = (directory / revision).read_text(encoding="utf-8", errors="replace")
+            path = _history_path(settings, device, revision)
+            if path is None: return HttpResponse("Configuration revision not found.", status=404, content_type="text/plain")
+            current = path.read_text(encoding="utf-8", errors="replace")
         else: current, _ = read_current(settings.storage_root, device.pk)
     except OSError as exc: return HttpResponse(f"LibreOXI storage is not accessible: {exc}", status=500, content_type="text/plain")
     if not current: return HttpResponse("No configuration is stored for this device.", status=404, content_type="text/plain")
@@ -361,6 +393,8 @@ def download_config(request, pk):
 
 
 def logs_view(request):
+    if (denied := _check(request, VIEW_PERM)) is not None:
+        return denied
     settings = LibreOXISettings.objects.first()
     if not settings:
         return render(request, "netbox_libreoxi/logs.html", {"settings": None, "devices": [], "selected_device": None, "logs": [], "scheduled_runs": [], "lang": "en"})
@@ -368,7 +402,8 @@ def logs_view(request):
     query = request.GET.get("q", "").strip()
     status = request.GET.get("status", "").strip().upper()
     status = status if status in LOG_STATUSES else ""
-    all_devices = monitored_devices(settings)
+    visible = monitored_devices(settings).restrict(request.user, "view")
+    all_devices = visible
     if query:
         all_devices = all_devices.filter(name__icontains=query)
     device_limit = _page_size(request, "devices")
@@ -393,7 +428,7 @@ def logs_view(request):
     logs, logs_more, scheduled_runs, runs_more = [], False, [], False
     selected_id = request.GET.get("device", "").strip()
     if selected_id.isdigit():
-        selected_device = monitored_devices(settings).filter(pk=int(selected_id)).first()
+        selected_device = visible.filter(pk=int(selected_id)).first()
     if selected_device:
         logs, logs_more = read_device_logs(settings.storage_root, selected_device, settings, limit, event=status or None)
     else:
@@ -426,6 +461,8 @@ def logs_view(request):
 
 
 def settings_view(request):
+    if (denied := _check(request, MANAGE_PERM)) is not None:
+        return denied
     instance = LibreOXISettings.objects.first()
     if instance is None: instance = LibreOXISettings(librenms_url="", oxidized_path="/api/v0/oxidized/config", storage_root="/opt/libreoxi")
     if request.method == "POST":
@@ -493,19 +530,22 @@ def _chosen_recipients(request, settings, lang):
 
 
 def audit_view(request):
-    if not request.user.is_authenticated:
-        return redirect(f"{reverse('login')}?next={request.path}")
+    if (denied := _check(request, VIEW_PERM)) is not None:
+        return denied
     settings = LibreOXISettings.objects.first()
     if not settings:
         return render(request, "netbox_libreoxi/audit.html", {"settings": None, "lang": "en"})
 
-    devices = list(monitored_devices(settings))
+    visible = list(monitored_devices(settings).restrict(request.user, "view"))
+    devices = visible
     selected_ids = [int(value) for value in request.GET.getlist("device") if value.isdigit()]
     if selected_ids:
         devices = [device for device in devices if device.pk in selected_ids]
     since, until, label = _audit_period(request, settings)
     lang = language_of(settings)
     if request.method == "POST" and request.POST.get("action") == "send_email":
+        if not request.user.has_perm(MANAGE_PERM):
+            raise PermissionDenied
         attach_pdf = request.POST.get("attach_pdf") == "on"
         protect = request.POST.get("pdf_protect") == "on"
         password = (request.POST.get("pdf_password") or settings.audit_pdf_password) if protect else ""
@@ -528,7 +568,7 @@ def audit_view(request):
         return redirect(f"{request.path}?{request.GET.urlencode()}")
     context = {
         "settings": settings,
-        "all_devices": list(monitored_devices(settings)),
+        "all_devices": visible,
         "selected_ids": selected_ids,
         "period": request.GET.get("period", "today"),
         "day": request.GET.get("day", ""),
@@ -540,6 +580,7 @@ def audit_view(request):
         "recipient_list": audit.recipients(settings),
         "pdf_password_set": bool(settings.audit_pdf_password),
         "lang": lang,
+        "can_send": request.user.has_perm(MANAGE_PERM),
         "default_attach_pdf": settings.audit_email_attach_pdf,
         "min_severity": audit.severity_label(settings.audit_min_severity, lang),
     }
@@ -571,8 +612,8 @@ def audit_view(request):
 
 
 def email_view(request):
-    if not request.user.is_authenticated:
-        return redirect(f"{reverse('login')}?next={request.path}")
+    if (denied := _check(request, MANAGE_PERM)) is not None:
+        return denied
     instance = LibreOXISettings.objects.first()
     if instance is None:
         messages.warning(request, tr("ui.save_settings_first", "en"))

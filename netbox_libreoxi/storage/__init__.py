@@ -96,4 +96,6 @@ def append_log(root: str, message: str) -> None:
     path.mkdir(parents=True, exist_ok=True)
     with (path / "libreoxi.log").open("a", encoding="utf-8") as log:
         timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        # One entry per line: line breaks in error texts must not start a forged entry.
+        message = " ".join(str(message).splitlines())
         log.write(f"{timestamp} {message}\n")
