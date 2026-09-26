@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 from html import escape
@@ -62,7 +61,6 @@ def smtp_securities(lang: str = "en") -> list[tuple[str, str]]:
     return [(key, tr(f"security.{key}", lang)) for key in ("none", "ssl", "starttls")]
 
 
-AUDIT_FILE = "audit.jsonl"
 LAST_SENT_FILE = ".audit_last_sent"
 
 _FIREWALL = re.compile(
@@ -442,52 +440,6 @@ def _root(settings) -> Path:
     return Path(settings.storage_root).expanduser().resolve()
 
 
-def record(settings, device, ip: str | None, changes: list[Change], author: str = "") -> None:
-    """Append the detected changes of one device to the audit log."""
-    if not changes:
-        return
-    entry = {
-        "time": datetime.now(dt_timezone.utc).isoformat(timespec="seconds"),
-        "device_id": device.pk,
-        "device": str(device),
-        "ip": ip or "",
-        "author": author or "",
-        "changes": [
-            {
-                "category": classify(change),
-                "action": change.action,
-                "object": change.obj,
-                "message": mask_secrets(change.message),
-                "old": mask_secrets(change.old),
-                "new": mask_secrets(change.new),
-            }
-            for change in changes
-        ],
-    }
-    root = _root(settings)
-    root.mkdir(parents=True, exist_ok=True)
-    with (root / AUDIT_FILE).open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-
-def read_entries(settings, since: datetime, until: datetime) -> list[dict]:
-    path = _root(settings) / AUDIT_FILE
-    if not path.exists():
-        return []
-    entries = []
-    with path.open(encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            try:
-                entry = json.loads(line)
-                when = datetime.fromisoformat(entry["time"])
-            except (ValueError, KeyError, TypeError):
-                continue
-            if since <= when < until:
-                entry["when"] = when
-                entries.append(entry)
-    return entries
-
-
 # --------------------------------------------------------------------------
 # Daily report
 # --------------------------------------------------------------------------
@@ -538,10 +490,6 @@ def _report_from_entries(settings, entries: list[dict], since: datetime, until: 
         "since": since,
         "until": until,
     }
-
-
-def build_report(settings, since: datetime, until: datetime) -> dict:
-    return _report_from_entries(settings, read_entries(settings, since, until), since, until)
 
 
 def build_preview(

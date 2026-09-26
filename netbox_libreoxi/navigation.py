@@ -22,21 +22,25 @@ menu_label = lazy(_menu_label, str)
 settings_item = PluginMenuItem(
     link="plugins:netbox_libreoxi:settings",
     link_text=menu_label("menu.settings"),
+    permissions=["netbox_libreoxi.change_libreoxisettings"],
 )
 
 logs_item = PluginMenuItem(
     link="plugins:netbox_libreoxi:logs",
     link_text=menu_label("menu.logs"),
+    permissions=["netbox_libreoxi.view_libreoxisettings"],
 )
 
 audit_item = PluginMenuItem(
     link="plugins:netbox_libreoxi:audit",
     link_text=menu_label("menu.audit"),
+    permissions=["netbox_libreoxi.view_libreoxisettings"],
 )
 
 email_item = PluginMenuItem(
     link="plugins:netbox_libreoxi:email",
     link_text=menu_label("menu.email"),
+    permissions=["netbox_libreoxi.change_libreoxisettings"],
 )
 
 
