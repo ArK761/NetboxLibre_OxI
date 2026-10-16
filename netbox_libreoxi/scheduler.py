@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from croniter import croniter
 from django.utils import timezone
@@ -30,6 +30,19 @@ def schedule_matches(now: datetime | None, schedule: str) -> tuple[bool, datetim
         if croniter.match(expression, local_now):
             return True, local_now
     return False, None
+
+
+def latest_slot(now: datetime | None, schedule: str) -> datetime | None:
+    """Most recent cron slot at or before `now` (minute precision), or None.
+
+    Unlike schedule_matches() this does not need the job to run in exactly the minute of the slot:
+    NetBox re-schedules a 1-minute job at "finished + 1 minute", so its run times drift against the
+    wall clock and a whole minute is skipped from time to time.
+    """
+    local_now = timezone.localtime(now or timezone.now()).replace(second=0, microsecond=0)
+    start = local_now + timedelta(minutes=1)  # get_prev() is exclusive, so a slot in this very minute is found
+    slots = [croniter(expression, start).get_prev(datetime) for expression in cron_lines(schedule)]
+    return max(slots) if slots else None
 
 
 def next_scheduled_check(now: datetime | None, schedule: str) -> datetime:

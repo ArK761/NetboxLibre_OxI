@@ -1,0 +1,2 @@
+croniter<7,>=2.0
+reportlab<6,>=4.0
