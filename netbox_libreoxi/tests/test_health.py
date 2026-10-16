@@ -109,18 +109,44 @@ class BannerViewTests(HealthBase):
     def test_green_when_all_is_well(self):
         self.healthy()
         response = self.client.get(self.url)
-        self.assertContains(response, "alert-success")
-        self.assertNotContains(response, "alert-danger")
+        self.assertContains(response, "lox-health")
+        self.assertNotContains(response, "lox-health lox-bad")
 
     def test_red_with_reload_button_and_reload_fixes_it(self):
         make_job(REFRESH, JobStatusChoices.STATUS_RUNNING, started=timezone.now() - timedelta(hours=2), age=7200)
         make_job(MAIL, JobStatusChoices.STATUS_SCHEDULED, scheduled=timezone.now() + timedelta(seconds=30))
         response = self.client.get(self.url)
-        self.assertContains(response, "alert-danger")
+        self.assertContains(response, "lox-health lox-bad")
         self.assertContains(response, reverse("plugins:netbox_libreoxi:health_reload"))
         response = self.client.post(reverse("plugins:netbox_libreoxi:health_reload"), {"next": self.url})
         self.assertRedirects(response, self.url, fetch_redirect_response=False)
-        self.assertContains(self.client.get(self.url), "alert-success")
+        self.assertNotContains(self.client.get(self.url), "lox-health lox-bad")
+
+    def test_details_window_says_all_is_ok(self):
+        self.healthy()
+        html = self.client.get(self.url).content.decode()
+        self.assertIn("lox-health-modal", html)
+        self.assertIn("mdi-dots-vertical", html)
+        self.assertIn("Everything is OK", html)
+        self.assertIn("Nothing to do", html)
+        self.assertNotIn("lox-health lox-bad", html)
+
+    def test_details_window_tells_what_to_do(self):
+        make_job(REFRESH, JobStatusChoices.STATUS_RUNNING, started=timezone.now() - timedelta(hours=2), age=7200)
+        make_job(MAIL, JobStatusChoices.STATUS_SCHEDULED, scheduled=timezone.now() + timedelta(seconds=30))
+        html = self.client.get(self.url).content.decode()
+        self.assertIn("lox-health lox-bad", html)
+        self.assertIn("Action needed", html)
+        self.assertIn("Press Reload", html)
+        self.assertIn(REFRESH, html)
+
+    def test_worker_down_advice_is_not_reload(self):
+        self.healthy()
+        with mock.patch.object(health, "worker_running", return_value=False):
+            html = self.client.get(self.url).content.decode()
+        self.assertIn("Ask the server administrator", html)
+        self.assertNotIn("Press Reload", html)
+        self.assertNotIn(reverse("plugins:netbox_libreoxi:health_reload"), html)
 
     def test_foreign_redirect_target_is_ignored(self):
         response = self.client.post(reverse("plugins:netbox_libreoxi:health_reload"), {"next": "https://evil.example/"})
@@ -139,4 +165,4 @@ class BannerViewTests(HealthBase):
         LibreOXISettings.objects.create(librenms_url="http://x", oxidized_path="/api", storage_root="/tmp/libreoxi-test")
         self.healthy()
         for name in ("settings", "audit", "email", "logs"):
-            self.assertContains(self.client.get(reverse(f"plugins:netbox_libreoxi:{name}")), "alert-success", msg_prefix=name)
+            self.assertContains(self.client.get(reverse(f"plugins:netbox_libreoxi:{name}")), "lox-health", msg_prefix=name)

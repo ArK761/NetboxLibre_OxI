@@ -95,23 +95,59 @@ def last_scheduled_check(settings):
         return None
 
 
-def status(settings) -> dict:
-    """{"ok": bool, "messages": [str], "last": datetime | None, "can_repair": bool}"""
+def overview(settings) -> list[dict]:
+    """[{"name", "text"}]: what every job of the plugin is doing now (for the details window)."""
+    from core.choices import JobStatusChoices
+
     lang = language_of(settings)
-    messages = []
+    rows = []
+    for name in JOB_NAMES:
+        job = _enqueued(name).order_by("-id").first()
+        if job is None:
+            text = tr("health.s_none", lang)
+        elif job.status == JobStatusChoices.STATUS_RUNNING:
+            text = tr("health.s_running", lang, time=_clock(job.started or job.created))
+        elif job.status == JobStatusChoices.STATUS_SCHEDULED:
+            text = tr("health.s_scheduled", lang, time=_clock(job.scheduled))
+        else:
+            text = tr("health.s_pending", lang)
+        rows.append({"name": name, "text": text})
+    return rows
+
+
+def _clock(value) -> str:
+    return timezone.localtime(value).strftime("%H:%M:%S") if value else "-"
+
+
+def status(settings) -> dict:
+    """What the health bar shows.
+
+    {"ok", "messages" (what is wrong), "advice" (what to do), "overview" (job by job), "worker" (True / False / None),
+     "last" (last scheduled check), "can_repair" (Reload helps)}
+    """
+    lang = language_of(settings)
+    messages, advice = [], []
     worker = worker_running()
     if worker is False:
         messages.append(tr("health.worker_down", lang))
+        advice.append(tr("health.do_worker", lang))
     try:
         problems = job_problems()
+        rows = overview(settings)
     except Exception as exc:
-        problems = []
+        problems, rows = [], []
         messages.append(tr("health.cannot_check", lang, error=exc.__class__.__name__))
+        advice.append(tr("health.do_check", lang))
     for problem in problems:
         messages.append(tr(f"health.r_{problem['kind']}", lang, name=problem["name"], seconds=problem["seconds"]))
+    if problems:
+        advice.append(tr("health.do_reload", lang))
     return {
         "ok": not messages,
         "messages": messages,
+        "advice": advice,
+        "overview": rows,
+        "worker": worker,
         "last": last_scheduled_check(settings) if settings else None,
         # Reload cannot start a worker that is not running; it repairs jobs only.
         "can_repair": bool(problems),

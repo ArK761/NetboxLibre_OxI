@@ -1,21 +1,71 @@
 {% load libreoxi_tags %}
-{% if state.ok %}
-<div class="alert alert-success d-flex flex-wrap align-items-center gap-2 mb-3 py-2" role="status">
-  <strong>{{ "health.ok"|tr:lang }}</strong>
-  {% if last_display %}<span class="small">{% trf "health.ok_last" lang time=last_display %}</span>{% endif %}
-</div>
-{% else %}
-<div class="alert alert-danger d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 py-2" role="alert">
+<style>
+  .lox-health { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap;
+    padding: .55rem .9rem; margin-bottom: 1rem; border-radius: var(--bs-border-radius, .375rem); color: #fff; background: #2fb344; }
+  .lox-health.lox-bad { background: #d63939; }
+  .lox-health .lox-light { width: .8rem; height: .8rem; border-radius: 50%; background: #fff; display: inline-block; margin-right: .5rem; }
+  .lox-health .lox-more { color: #fff; border: 1px solid rgba(255,255,255,.7); background: transparent; line-height: 1; padding: .2rem .45rem; }
+  .lox-health .lox-more:hover { background: rgba(255,255,255,.2); }
+</style>
+<div class="lox-health {% if not state.ok %}lox-bad{% endif %}" role="{% if state.ok %}status{% else %}alert{% endif %}">
   <div>
-    <strong>{{ "health.bad"|tr:lang }}</strong>
-    {% for message in state.messages %}<div class="small">{{ message }}</div>{% endfor %}
+    <span class="lox-light"></span>
+    <strong>{% if state.ok %}{{ "health.ok"|tr:lang }}{% else %}{{ "health.bad"|tr:lang }}{% endif %}</strong>
+    {% if state.ok and last_display %}<span class="small ms-2">{% trf "health.ok_last" lang time=last_display %}</span>{% endif %}
+    {% if not state.ok %}<span class="small ms-2">{{ state.messages.0 }}</span>{% endif %}
   </div>
-  {% if can_reload %}
-  <form method="post" action="{% url 'plugins:netbox_libreoxi:health_reload' %}" class="m-0">
-    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
-    <input type="hidden" name="next" value="{{ next }}">
-    <button type="submit" class="btn btn-sm btn-light" title="{{ 'health.reload_hint'|tr:lang }}">{{ "health.reload"|tr:lang }}</button>
-  </form>
-  {% endif %}
+  <div class="d-flex align-items-center gap-2">
+    {% if can_reload %}
+    <form method="post" action="{% url 'plugins:netbox_libreoxi:health_reload' %}" class="m-0">
+      <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit" class="btn btn-sm btn-light" title="{{ 'health.reload_hint'|tr:lang }}">{{ "health.reload"|tr:lang }}</button>
+    </form>
+    {% endif %}
+    <button type="button" class="btn btn-sm lox-more" data-bs-toggle="modal" data-bs-target="#lox-health-modal"
+            title="{{ 'health.details'|tr:lang }}" aria-label="{{ 'health.details'|tr:lang }}"><i class="mdi mdi-dots-vertical"></i></button>
+  </div>
 </div>
-{% endif %}
+
+<div class="modal fade" id="lox-health-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="badge {% if state.ok %}bg-success{% else %}bg-danger{% endif %} me-2">&nbsp;</span>
+          {% if state.ok %}{{ "health.title_ok"|tr:lang }}{% else %}{{ "health.title_bad"|tr:lang }}{% endif %}
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ 'health.close'|tr:lang }}"></button>
+      </div>
+      <div class="modal-body">
+        {% if state.ok %}
+          <p class="mb-3">{{ "health.nothing_to_do"|tr:lang }}</p>
+        {% else %}
+          <h6>{{ "health.problems"|tr:lang }}</h6>
+          <ul>{% for message in state.messages %}<li>{{ message }}</li>{% endfor %}</ul>
+          <h6>{{ "health.what_to_do"|tr:lang }}</h6>
+          <ul>{% for item in state.advice %}<li>{{ item }}</li>{% endfor %}</ul>
+          {% if state.can_repair and not can_manage %}<p class="small text-muted">{{ "health.no_permission"|tr:lang }}</p>{% endif %}
+        {% endif %}
+        <h6 class="mt-3">{{ "health.details"|tr:lang }}</h6>
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td>{{ "health.worker"|tr:lang }}</td><td>{% if state.worker is True %}{{ "health.worker_yes"|tr:lang }}{% elif state.worker is False %}{{ "health.worker_no"|tr:lang }}{% else %}{{ "health.worker_unknown"|tr:lang }}{% endif %}</td></tr>
+            {% for row in state.overview %}<tr><td>{{ row.name }}</td><td>{{ row.text }}</td></tr>{% endfor %}
+            {% if last_display %}<tr><td>{{ "health.last_check"|tr:lang }}</td><td>{{ last_display }}</td></tr>{% endif %}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        {% if can_reload %}
+        <form method="post" action="{% url 'plugins:netbox_libreoxi:health_reload' %}" class="m-0 me-auto">
+          <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="{{ next }}">
+          <button type="submit" class="btn btn-danger">{{ "health.reload"|tr:lang }}</button>
+        </form>
+        {% endif %}
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ "health.close"|tr:lang }}</button>
+      </div>
+    </div>
+  </div>
+</div>
