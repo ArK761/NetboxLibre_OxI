@@ -145,8 +145,10 @@ class LibreOXIAuditMailJob(JobRunner):
         # Log entries are always in English, whatever language is chosen for the audit.
         period = f"{since.isoformat(timespec='minutes')}..{until.isoformat(timespec='minutes')}"
         # Mark the slot first so that a slow or failing SMTP server does not
-        # cause the same audit to be sent again every minute.
-        audit.write_last_sent(settings, slot)
+        # cause the same audit to be sent again every minute. The actual time of sending is stored (shown as
+        # "Last automatic sending"), not the configured slot; it is never earlier than the slot, so the
+        # "already sent for this slot" check still works.
+        audit.write_last_sent(settings, timezone.now())
         try:
             result = audit.send_audit(settings, list(monitored_devices(settings)), since, until, label)
         except Exception as exc:
