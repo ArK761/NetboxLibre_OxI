@@ -177,6 +177,34 @@ class EmailPageInfoTests(HealthBase):
         LibreOXISettings.objects.create(librenms_url="http://x", oxidized_path="/api", storage_root="/tmp/libreoxi-mail-test",
                                         audit_email_enabled=True, audit_email_recipients="a@example.com")
         html = self.client.get(reverse("plugins:netbox_libreoxi:email")).content.decode()
-        self.assertIn("Automatic e-mail (cron): not sent yet", html)
-        self.assertIn("Test e-mail: not sent yet", html)
-        self.assertIn("Next e-mail:", html)
+        self.assertIn("libreoxi-send-status", html)
+        self.assertLess(html.index("libreoxi-send-status"), html.index("libreoxi-email-form"))  # on top of the page
+        self.assertIn("Last automatic e-mail (cron)", html)
+        self.assertIn("Next e-mail", html)
+        self.assertIn("Last test e-mail", html)
+        self.assertEqual(html.count("not sent yet"), 2)
+
+
+class BuildInfoTests(HealthBase):
+    def test_version_and_commit_are_shown_in_the_bar(self):
+        admin = User.objects.create_superuser(username="root", password="x", email="r@example.com")
+        self.client.force_login(admin)
+        build = {"version": "9.9.9", "commit": "b8572f47156a386ef9087d973128129e52ce20f8", "short": "b8572f4"}
+        with mock.patch.object(health, "plugin_build", return_value=build):
+            html = self.client.get(reverse("plugins:netbox_libreoxi:logs")).content.decode()
+        self.assertIn("v9.9.9 · b8572f4", html)
+        self.assertIn(build["commit"], html)
+
+    def test_commit_is_read_from_pip_metadata(self):
+        class Dist:
+            version = "1.2.3"
+
+            def read_text(self, name):
+                return '{"url": "x", "vcs_info": {"vcs": "git", "commit_id": "abcdef1234567890"}}'
+
+        with mock.patch("importlib.metadata.distribution", return_value=Dist()):
+            self.assertEqual(health.plugin_build(), {"version": "1.2.3", "commit": "abcdef1234567890", "short": "abcdef1"})
+
+    def test_missing_metadata_does_not_break(self):
+        with mock.patch("importlib.metadata.distribution", side_effect=Exception("x")):
+            self.assertEqual(health.plugin_build(), {"version": "", "commit": "", "short": ""})

@@ -645,17 +645,21 @@ def email_view(request):
     last_test = audit.read_last_test(instance)
     now = django_timezone.now()
     next_send = audit.next_scheduled_send(instance, now)
+    never = tr("ui.sched_never_value", lang)
     if next_send is None:
-        next_text = tr("ui.sched_off", lang)
+        next_value, next_note, next_state = tr("ui.sched_off_value", lang), "", "muted"
     elif next_send <= now:
-        next_text = tr("ui.sched_next_due", lang, time=format_timestamp(next_send.isoformat(), instance))
+        next_value, next_state = format_timestamp(next_send.isoformat(), instance), "warning"
+        next_note = tr("ui.sched_due_note", lang)
     else:
-        next_text = tr("ui.sched_next", lang, time=format_timestamp(next_send.isoformat(), instance),
-                       remaining=audit.format_remaining(next_send - now, lang))
+        next_value, next_state = format_timestamp(next_send.isoformat(), instance), "info"
+        next_note = tr("ui.sched_in", lang, remaining=audit.format_remaining(next_send - now, lang))
     schedule_info = [
-        tr("ui.sched_last", lang, time=format_timestamp(last_sent.isoformat(), instance)) if last_sent else tr("ui.sched_never", lang),
-        next_text,
-        tr("ui.test_last", lang, time=format_timestamp(last_test.isoformat(), instance)) if last_test else tr("ui.test_never", lang),
+        {"label": tr("ui.sched_last_label", lang), "icon": "mdi-email-check-outline", "state": "success" if last_sent else "muted",
+         "value": format_timestamp(last_sent.isoformat(), instance) if last_sent else never, "note": ""},
+        {"label": tr("ui.sched_next_label", lang), "icon": "mdi-email-fast-outline", "state": next_state, "value": next_value, "note": next_note},
+        {"label": tr("ui.test_last_label", lang), "icon": "mdi-email-search-outline", "state": "success" if last_test else "muted",
+         "value": format_timestamp(last_test.isoformat(), instance) if last_test else never, "note": ""},
     ]
     return render(
         request,

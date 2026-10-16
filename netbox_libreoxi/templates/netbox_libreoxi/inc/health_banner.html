@@ -4,6 +4,7 @@
     padding: .55rem .9rem; margin-bottom: 1rem; border-radius: var(--bs-border-radius, .375rem); color: #fff; background: #2fb344; }
   .lox-health.lox-bad { background: #d63939; }
   .lox-health .lox-light { width: .8rem; height: .8rem; border-radius: 50%; background: #fff; display: inline-block; margin-right: .5rem; }
+  .lox-health .lox-build { font-size: .75rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(0,0,0,.22); white-space: nowrap; }
   .lox-health .lox-more { color: #fff; border: 1px solid rgba(255,255,255,.7); background: transparent; line-height: 1; padding: .2rem .45rem; }
   .lox-health .lox-more:hover { background: rgba(255,255,255,.2); }
 </style>
@@ -15,6 +16,7 @@
     {% if not state.ok %}<span class="small ms-2">{{ state.messages.0 }}</span>{% endif %}
   </div>
   <div class="d-flex align-items-center gap-2">
+    {% if build.version %}<span class="lox-build" title="{{ build.commit }}">v{{ build.version }}{% if build.short %} · {{ build.short }}{% endif %}</span>{% endif %}
     {% if can_reload %}
     <form method="post" action="{% url 'plugins:netbox_libreoxi:health_reload' %}" class="m-0">
       <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
@@ -52,6 +54,7 @@
           <tbody>
             <tr><td>{{ "health.worker"|tr:lang }}</td><td>{% if state.worker is True %}{{ "health.worker_yes"|tr:lang }}{% elif state.worker is False %}{{ "health.worker_no"|tr:lang }}{% else %}{{ "health.worker_unknown"|tr:lang }}{% endif %}</td></tr>
             {% for row in state.overview %}<tr><td>{{ row.name }}</td><td>{{ row.text }}</td></tr>{% endfor %}
+            {% if build.version %}<tr><td>{{ "health.build"|tr:lang }}</td><td>v{{ build.version }}{% if build.short %} · <code title="{{ build.commit }}">{{ build.short }}</code>{% endif %}</td></tr>{% endif %}
             {% if last_display %}<tr><td>{{ "health.last_check"|tr:lang }}</td><td>{{ last_display }}</td></tr>{% endif %}
           </tbody>
         </table>

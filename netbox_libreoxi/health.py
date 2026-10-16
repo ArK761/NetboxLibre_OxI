@@ -27,6 +27,22 @@ def _job_classes():
     return (LibreOXIRefreshJob, LibreOXIAuditMailJob)
 
 
+def plugin_build() -> dict:
+    """{"version", "commit", "short"}: the installed version and, for an installation from git, its commit."""
+    import json
+    from importlib import metadata
+
+    version = commit = ""
+    try:
+        distribution = metadata.distribution("netbox-libreoxi")
+        version = distribution.version
+        direct_url = distribution.read_text("direct_url.json")  # written by pip for installs from a git URL
+        commit = (json.loads(direct_url).get("vcs_info") or {}).get("commit_id", "") if direct_url else ""
+    except Exception:
+        pass
+    return {"version": version, "commit": commit, "short": commit[:7]}
+
+
 def worker_running() -> bool | None:
     """True / False when netbox-rq's workers are registered in Redis, None when that cannot be told."""
     try:

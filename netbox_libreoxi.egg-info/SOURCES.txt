@@ -5,6 +5,7 @@ netbox_libreoxi/audit.py
 netbox_libreoxi/audit_pdf.py
 netbox_libreoxi/config_changes.py
 netbox_libreoxi/forms.py
+netbox_libreoxi/health.py
 netbox_libreoxi/i18n.py
 netbox_libreoxi/models.py
 netbox_libreoxi/navigation.py
@@ -43,8 +44,11 @@ netbox_libreoxi/templates/netbox_libreoxi/email.html
 netbox_libreoxi/templates/netbox_libreoxi/logs.html
 netbox_libreoxi/templates/netbox_libreoxi/settings.html
 netbox_libreoxi/templates/netbox_libreoxi/inc/email_field.html
+netbox_libreoxi/templates/netbox_libreoxi/inc/health_banner.html
 netbox_libreoxi/templates/netbox_libreoxi/inc/recipients_pick.html
 netbox_libreoxi/templatetags/__init__.py
 netbox_libreoxi/templatetags/libreoxi_tags.py
 netbox_libreoxi/tests/__init__.py
+netbox_libreoxi/tests/test_audit_mail.py
+netbox_libreoxi/tests/test_health.py
 netbox_libreoxi/tests/test_refresh.py

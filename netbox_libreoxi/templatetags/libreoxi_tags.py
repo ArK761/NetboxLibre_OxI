@@ -88,6 +88,6 @@ def libreoxi_health(context):
     can_manage = bool(request is not None and request.user.has_perm("netbox_libreoxi.change_libreoxisettings"))
     return {
         "state": state, "lang": lang, "last_display": display, "can_reload": can_manage and state["can_repair"],
-        "can_manage": can_manage,
+        "can_manage": can_manage, "build": health.plugin_build(),
         "csrf_token": context.get("csrf_token"), "next": request.get_full_path() if request is not None else "",
     }
