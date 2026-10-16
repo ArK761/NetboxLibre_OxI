@@ -19,6 +19,17 @@ def language_of(settings) -> str:
     return lang if lang in dict(LANGUAGES) else DEFAULT_LANGUAGE
 
 
+def day_word(count: int, lang: str) -> str:
+    """"day" in the right form for the number (1 / 2-4 / 5+ in Slovak and Czech)."""
+    if lang == "sk":
+        return "deň" if count == 1 else "dni" if 2 <= count <= 4 else "dní"
+    if lang == "cs":
+        return "den" if count == 1 else "dny" if 2 <= count <= 4 else "dnů"
+    if lang == "de":
+        return "Tag" if count == 1 else "Tage"
+    return "day" if count == 1 else "days"
+
+
 def tr(key: str, lang: str = DEFAULT_LANGUAGE, **values) -> str:
     entry = MESSAGES.get(key)
     if entry is None:
@@ -314,6 +325,13 @@ MESSAGES: dict[str, dict[str, str]] = {
     "ui.email_options": {"en": "Email Options", "sk": "Nastavenie e-mailu", "cs": "Nastavení e-mailu", "de": "E-Mail-Optionen"},
     "ui.audit_sending": {"en": "Audit e-mail", "sk": "Odosielanie auditu", "cs": "Odesílání auditu", "de": "Audit-E-Mail"},
     "ui.password_saved": {"en": "A password is saved.", "sk": "Heslo je uložené.", "cs": "Heslo je uložené.", "de": "Ein Passwort ist gespeichert."},
+    "ui.sched_last": {"en": "Automatic e-mail (cron): sent {time}", "sk": "Automatický e-mail (cron): odoslaný {time}", "cs": "Automatický e-mail (cron): odeslán {time}", "de": "Automatische E-Mail (Cron): gesendet {time}"},
+    "ui.sched_never": {"en": "Automatic e-mail (cron): not sent yet", "sk": "Automatický e-mail (cron): zatiaľ neodoslaný", "cs": "Automatický e-mail (cron): zatím neodeslán", "de": "Automatische E-Mail (Cron): noch nicht gesendet"},
+    "ui.sched_next": {"en": "Next e-mail: {time} (in {remaining})", "sk": "Najbližší e-mail: {time} (o {remaining})", "cs": "Nejbližší e-mail: {time} (za {remaining})", "de": "Nächste E-Mail: {time} (in {remaining})"},
+    "ui.sched_next_due": {"en": "Next e-mail: {time} (due now, goes out within a minute)", "sk": "Najbližší e-mail: {time} (už je na rade, odíde do minúty)", "cs": "Nejbližší e-mail: {time} (už je na řadě, odejde do minuty)", "de": "Nächste E-Mail: {time} (fällig, wird innerhalb einer Minute gesendet)"},
+    "ui.sched_off": {"en": "Next e-mail: automatic sending is off (or there are no recipients)", "sk": "Najbližší e-mail: automatické odosielanie je vypnuté (alebo nie sú príjemcovia)", "cs": "Nejbližší e-mail: automatické odesílání je vypnuto (nebo nejsou příjemci)", "de": "Nächste E-Mail: automatischer Versand ist aus (oder es gibt keine Empfänger)"},
+    "ui.test_last": {"en": "Test e-mail: sent {time}", "sk": "Testovací e-mail: odoslaný {time}", "cs": "Testovací e-mail: odeslán {time}", "de": "Test-E-Mail: gesendet {time}"},
+    "ui.test_never": {"en": "Test e-mail: not sent yet", "sk": "Testovací e-mail: zatiaľ neodoslaný", "cs": "Testovací e-mail: zatím neodeslán", "de": "Test-E-Mail: noch nicht gesendet"},
     "ui.last_sent": {"en": "Last automatic sending: {time}", "sk": "Posledné automatické odoslanie: {time}", "cs": "Poslední automatické odeslání: {time}", "de": "Letzter automatischer Versand: {time}"},
     "ui.save": {"en": "Save", "sk": "Uložiť", "cs": "Uložit", "de": "Speichern"},
     "ui.send_test": {"en": "Send test e-mail", "sk": "Poslať testovací e-mail", "cs": "Poslat testovací e-mail", "de": "Test-E-Mail senden"},

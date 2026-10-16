@@ -642,10 +642,26 @@ def email_view(request):
     else:
         form = LibreOXIEmailForm(instance=instance)
     last_sent = audit.read_last_sent(instance)
+    last_test = audit.read_last_test(instance)
+    now = django_timezone.now()
+    next_send = audit.next_scheduled_send(instance, now)
+    if next_send is None:
+        next_text = tr("ui.sched_off", lang)
+    elif next_send <= now:
+        next_text = tr("ui.sched_next_due", lang, time=format_timestamp(next_send.isoformat(), instance))
+    else:
+        next_text = tr("ui.sched_next", lang, time=format_timestamp(next_send.isoformat(), instance),
+                       remaining=audit.format_remaining(next_send - now, lang))
+    schedule_info = [
+        tr("ui.sched_last", lang, time=format_timestamp(last_sent.isoformat(), instance)) if last_sent else tr("ui.sched_never", lang),
+        next_text,
+        tr("ui.test_last", lang, time=format_timestamp(last_test.isoformat(), instance)) if last_test else tr("ui.test_never", lang),
+    ]
     return render(
         request,
         "netbox_libreoxi/email.html",
         {
+            "schedule_info": schedule_info,
             "form": form,
             "recipients": ", ".join(audit.recipients(instance)),
             "last_sent": format_timestamp(last_sent.isoformat(), instance) if last_sent else "",

@@ -36,9 +36,9 @@
           {% if pdf_password_set %}
             <div class="form-text libreoxi-pdfpass">{{ "ui.pdf_password_is_set"|tr:lang }}</div>
           {% endif %}
-          {% if last_sent %}
-            <div class="form-text">{% trf "ui.last_sent" lang time=last_sent %}</div>
-          {% endif %}
+          <div class="form-text mt-2">
+            {% for line in schedule_info %}<div>{{ line }}</div>{% endfor %}
+          </div>
         </div>
       </div>
 

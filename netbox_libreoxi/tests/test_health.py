@@ -166,3 +166,17 @@ class BannerViewTests(HealthBase):
         self.healthy()
         for name in ("settings", "audit", "email", "logs"):
             self.assertContains(self.client.get(reverse(f"plugins:netbox_libreoxi:{name}")), "lox-health", msg_prefix=name)
+
+
+class EmailPageInfoTests(HealthBase):
+    def test_email_page_shows_last_next_and_test(self):
+        from netbox_libreoxi.models import LibreOXISettings
+
+        admin = User.objects.create_superuser(username="root", password="x", email="r@example.com")
+        self.client.force_login(admin)
+        LibreOXISettings.objects.create(librenms_url="http://x", oxidized_path="/api", storage_root="/tmp/libreoxi-mail-test",
+                                        audit_email_enabled=True, audit_email_recipients="a@example.com")
+        html = self.client.get(reverse("plugins:netbox_libreoxi:email")).content.decode()
+        self.assertIn("Automatic e-mail (cron): not sent yet", html)
+        self.assertIn("Test e-mail: not sent yet", html)
+        self.assertIn("Next e-mail:", html)

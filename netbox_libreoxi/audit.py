@@ -62,6 +62,7 @@ def smtp_securities(lang: str = "en") -> list[tuple[str, str]]:
 
 
 LAST_SENT_FILE = ".audit_last_sent"
+LAST_TEST_FILE = ".audit_last_test"
 
 _FIREWALL = re.compile(
     r"(access-list|access-group|\bacl\b|firewall|\bnat\b|policy-options|security-polic|"
@@ -724,6 +725,7 @@ def send_test_email(settings, to: list[str] | None = None) -> None:
     body = tr("mail.test_body", lang, time=now, server=server, recipients=", ".join(to))
     message = EmailMessage(subject=tr("mail.test_subject", lang), body=body, from_email=from_address(settings), to=to)
     _deliver(settings, message)
+    write_last_test(settings, timezone.now())
 
 
 def build_audit(settings, devices, since, until, label: str) -> dict:
@@ -793,6 +795,69 @@ def write_last_sent(settings, when: datetime) -> None:
         (_root(settings) / LAST_SENT_FILE).write_text(when.isoformat(timespec="seconds"), encoding="ascii")
     except OSError:
         pass
+
+
+def _read_time(settings, name: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat((_root(settings) / name).read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def read_last_test(settings) -> datetime | None:
+    """When the last test e-mail was sent successfully."""
+    return _read_time(settings, LAST_TEST_FILE)
+
+
+def write_last_test(settings, when: datetime) -> None:
+    try:
+        (_root(settings) / LAST_TEST_FILE).write_text(when.isoformat(timespec="seconds"), encoding="ascii")
+    except OSError:
+        pass
+
+
+def next_scheduled_send(settings, now: datetime) -> datetime | None:
+    """When the next automatic audit e-mail goes out (the same rules as scheduled_period), or None if it is off.
+
+    A slot that is already due (the job has not sent it yet) is returned as it is, i.e. in the past or now.
+    """
+    from django.utils import timezone
+
+    if not getattr(settings, "audit_email_enabled", False) or not recipients(settings):
+        return None
+    try:
+        hour, minute = (int(part) for part in (settings.audit_email_time or "07:00").split(":", 1))
+    except ValueError:
+        return None
+    local_now = timezone.localtime(now)
+    last_sent = read_last_sent(settings)
+    frequency = getattr(settings, "audit_email_frequency", "daily") or "daily"
+    weekday = getattr(settings, "audit_email_weekday", 0) or 0
+    for offset in range(0, 63):
+        day = local_now + timedelta(days=offset)
+        if frequency == "weekly" and day.weekday() != weekday:
+            continue
+        if frequency == "monthly" and day.day != 1:
+            continue
+        slot = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if last_sent is not None and last_sent >= slot:
+            continue  # already sent for this slot
+        if slot < local_now and offset != 0:
+            continue
+        return slot
+    return None
+
+
+def format_remaining(delta: timedelta, lang: str) -> str:
+    """"1 day 15 h" from a day on, otherwise "15 h 32 min" / "32 min"."""
+    from .i18n import day_word
+
+    total = max(0, int(delta.total_seconds()))
+    if total >= 86400:
+        days, rest = divmod(total, 86400)
+        return f"{days} {day_word(days, lang)} {rest // 3600} h"
+    hours, rest = divmod(total, 3600)
+    return f"{hours} h {rest // 60} min" if hours else f"{rest // 60} min"
 
 
 def scheduled_period(settings, now: datetime):
