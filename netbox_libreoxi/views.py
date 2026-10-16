@@ -10,7 +10,9 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone as django_timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import mark_safe
+from django.views.decorators.http import require_POST
 
 from dcim.models import Device
 from netbox.views import generic
@@ -654,3 +656,22 @@ def email_view(request):
         },
     )
 
+
+
+@require_POST
+def health_reload(request):
+    """Repair the plugin's background jobs from the web: remove stuck jobs and schedule new ones."""
+    if (denied := _check(request, MANAGE_PERM)) is not None:
+        return denied
+    from . import health
+
+    lang = language_of(LibreOXISettings.objects.first())
+    try:
+        result = health.reload_jobs()
+        messages.success(request, tr("health.reloaded", lang, **result))
+    except Exception as exc:
+        messages.error(request, tr("health.reload_failed", lang, error=exc.__class__.__name__))
+    target = request.POST.get("next", "")
+    if not url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        target = reverse("plugins:netbox_libreoxi:logs")
+    return redirect(target)

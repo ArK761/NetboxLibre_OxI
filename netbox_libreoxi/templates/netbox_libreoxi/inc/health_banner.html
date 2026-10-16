@@ -1,0 +1,21 @@
+{% load libreoxi_tags %}
+{% if state.ok %}
+<div class="alert alert-success d-flex flex-wrap align-items-center gap-2 mb-3 py-2" role="status">
+  <strong>{{ "health.ok"|tr:lang }}</strong>
+  {% if last_display %}<span class="small">{% trf "health.ok_last" lang time=last_display %}</span>{% endif %}
+</div>
+{% else %}
+<div class="alert alert-danger d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 py-2" role="alert">
+  <div>
+    <strong>{{ "health.bad"|tr:lang }}</strong>
+    {% for message in state.messages %}<div class="small">{{ message }}</div>{% endfor %}
+  </div>
+  {% if can_reload %}
+  <form method="post" action="{% url 'plugins:netbox_libreoxi:health_reload' %}" class="m-0">
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit" class="btn btn-sm btn-light" title="{{ 'health.reload_hint'|tr:lang }}">{{ "health.reload"|tr:lang }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
