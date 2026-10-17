@@ -23,7 +23,7 @@
       </div>
     </div>
 
-    <form method="post" id="libreoxi-email-form">
+    <form method="post" id="libreoxi-email-form" autocomplete="off" data-no-password-save>
       {% csrf_token %}
 
       <div class="card mb-3">
@@ -106,4 +106,5 @@
     }
   })();
 </script>
+{% include "netbox_libreoxi/inc/no_password_save.html" %}
 {% endblock %}

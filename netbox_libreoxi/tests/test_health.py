@@ -208,3 +208,34 @@ class BuildInfoTests(HealthBase):
     def test_missing_metadata_does_not_break(self):
         with mock.patch("importlib.metadata.distribution", side_effect=Exception("x")):
             self.assertEqual(health.plugin_build(), {"version": "", "commit": "", "short": ""})
+
+
+class LogsAndSecretsTests(HealthBase):
+    def setUp(self):
+        super().setUp()
+        from dcim.models import Device, DeviceRole, DeviceType, Manufacturer, Site
+        from netbox_libreoxi.models import LibreOXISettings
+
+        self.admin = User.objects.create_superuser(username="root", password="x", email="r@example.com")
+        self.client.force_login(self.admin)
+        role = DeviceRole.objects.create(name="sw", slug="sw")
+        site = Site.objects.create(name="s", slug="s")
+        vendor = Manufacturer.objects.create(name="m", slug="m")
+        kind = DeviceType.objects.create(manufacturer=vendor, model="t", slug="t")
+        self.device = Device.objects.create(name="SW01", role=role, site=site, device_type=kind)
+        LibreOXISettings.objects.create(librenms_url="http://x", oxidized_path="/api", storage_root="/tmp/libreoxi-logs-test",
+                                        device_role_ids=[role.pk], api_token_encrypted="secret-token")
+
+    def test_device_row_opens_the_device_in_a_new_window(self):
+        html = self.client.get(reverse("plugins:netbox_libreoxi:logs")).content.decode()
+        url = reverse("dcim:device_libreoxi", args=[self.device.pk])
+        self.assertIn(f'href="{url}" target="_blank" rel="noopener"', html)
+        self.assertIn(f"?device={self.device.pk}", html)  # the small button still shows the log on the page
+
+    def test_secret_fields_are_not_offered_to_the_password_manager(self):
+        for name in ("settings", "email"):
+            html = self.client.get(reverse(f"plugins:netbox_libreoxi:{name}")).content.decode()
+            self.assertIn("data-no-password-save", html, name)
+            self.assertIn('autocomplete="off"', html, name)
+            self.assertIn('autocomplete="new-password"', html, name)
+            self.assertIn("data-1p-ignore", html, name)

@@ -13,7 +13,7 @@
         <h5 class="card-title mb-0">{{ "set.title"|tr:lang }}</h5>
       </div>
       <div class="card-body">
-        <form method="post">
+        <form method="post" autocomplete="off" data-no-password-save>
           {% csrf_token %}
 
           {% for field in form %}
@@ -49,4 +49,5 @@
     </div>
   </div>
 </div>
+{% include "netbox_libreoxi/inc/no_password_save.html" %}
 {% endblock %}

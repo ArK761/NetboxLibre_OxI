@@ -341,6 +341,8 @@ MESSAGES: dict[str, dict[str, str]] = {
     "ui.sched_in": {"en": "in {remaining}", "sk": "o {remaining}", "cs": "za {remaining}", "de": "in {remaining}"},
     "ui.sched_due_note": {"en": "due now, goes out within a minute", "sk": "už je na rade, odíde do minúty", "cs": "už je na řadě, odejde do minuty", "de": "fällig, wird innerhalb einer Minute gesendet"},
     "health.build": {"en": "Installed version", "sk": "Nainštalovaná verzia", "cs": "Nainstalovaná verze", "de": "Installierte Version"},
+    "logs.open_device": {"en": "Open the device in a new window", "sk": "Otvoriť zariadenie v novom okne", "cs": "Otevřít zařízení v novém okně", "de": "Gerät in neuem Fenster öffnen"},
+    "logs.show_log": {"en": "Show the log of this device here", "sk": "Zobraziť log tohto zariadenia tu", "cs": "Zobrazit log tohoto zařízení zde", "de": "Log dieses Geräts hier anzeigen"},
     "ui.last_sent": {"en": "Last automatic sending: {time}", "sk": "Posledné automatické odoslanie: {time}", "cs": "Poslední automatické odeslání: {time}", "de": "Letzter automatischer Versand: {time}"},
     "ui.save": {"en": "Save", "sk": "Uložiť", "cs": "Uložit", "de": "Speichern"},
     "ui.send_test": {"en": "Send test e-mail", "sk": "Poslať testovací e-mail", "cs": "Poslat testovací e-mail", "de": "Test-E-Mail senden"},
