@@ -5,7 +5,7 @@ class NetBoxLibreOXIConfig(PluginConfig):
     name = "netbox_libreoxi"
     verbose_name = "NetBox LibreOXI"
     description = "Retrieve and track network device configurations from LibreNMS Oxidized/OXI."
-    version = "1.0.8"
+    version = "2.0.0"
     base_url = "libreoxi"
     min_version = "4.7.0"
     max_version = "4.7.99"
