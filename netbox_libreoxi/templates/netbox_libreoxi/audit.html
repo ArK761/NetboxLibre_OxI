@@ -4,6 +4,7 @@
 {% block title %}{{ "ui.audit_title"|tr:lang }}{% endblock %}
 
 {% block content %}
+{% libreoxi_health %}
 {% if not settings %}
   <div class="alert alert-warning">{{ "ui.not_configured"|tr:"en" }}</div>
 {% else %}

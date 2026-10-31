@@ -4,6 +4,7 @@
 {% block title %}{{ "logs.title"|tr:lang }}{% endblock %}
 
 {% block content %}
+{% libreoxi_health %}
 <style>
   .libreoxi-log-page { font-size: 0.88rem; }
   .libreoxi-log-tree .list-group-item { background: transparent; border-color: var(--bs-border-color); }
@@ -50,10 +51,13 @@
         </form>
         <div class="list-group list-group-flush">
           {% for device in devices %}
-            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_device and selected_device.pk == device.pk %}selected{% endif %}" href="?device={{ device.pk }}{% if list_qs %}&{{ list_qs }}{% endif %}">
-              <span><strong>{{ device }}</strong>{% if device.primary_ip4 %}<small class="text-muted d-block">{{ device.primary_ip4.address.ip }}</small>{% endif %}</span>
-              {% if device.latest_log %}{% if device.latest_log.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif device.latest_log.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif device.latest_log.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}{% endif %}
-            </a>
+            <div class="list-group-item d-flex align-items-center gap-2 {% if selected_device and selected_device.pk == device.pk %}selected{% endif %}">
+              <a class="flex-grow-1 d-flex justify-content-between align-items-center text-decoration-none text-reset" href="{% url 'dcim:device_libreoxi' device.pk %}" target="_blank" rel="noopener" title="{{ 'logs.open_device'|tr:lang }}">
+                <span><strong>{{ device }}</strong>{% if device.primary_ip4 %}<small class="text-muted d-block">{{ device.primary_ip4.address.ip }}</small>{% endif %}</span>
+                {% if device.latest_log %}{% if device.latest_log.event == 'CHANGE' %}<span class="libreoxi-log-event libreoxi-log-change">CHANGE</span>{% elif device.latest_log.event == 'NOCHANGE' %}<span class="libreoxi-log-event libreoxi-log-nochange">NO CHANGE</span>{% elif device.latest_log.event == 'ERROR' %}<span class="libreoxi-log-event libreoxi-log-error">ERROR</span>{% endif %}{% endif %}
+              </a>
+              <a class="btn btn-sm btn-outline-secondary" href="?device={{ device.pk }}{% if list_qs %}&{{ list_qs }}{% endif %}" title="{{ 'logs.show_log'|tr:lang }}" aria-label="{{ 'logs.show_log'|tr:lang }}"><i class="mdi mdi-text-box-search-outline"></i></a>
+            </div>
           {% empty %}<div class="p-3 text-muted">{% if query %}{{ "ui.no_match"|tr:lang }}{% else %}{{ "logs.no_devices"|tr:lang }}{% endif %}</div>{% endfor %}
         </div>
         {% if devices_more %}

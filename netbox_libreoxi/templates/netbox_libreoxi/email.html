@@ -4,10 +4,26 @@
 {% block title %}{{ "ui.email_options"|tr:lang }}{% endblock %}
 
 {% block content %}
+{% libreoxi_health %}
 {% load libreoxi_tags %}
 <div class="row">
   <div class="col-12 col-xl-8">
-    <form method="post" id="libreoxi-email-form">
+    <div class="card mb-3 border-start border-4 border-primary" id="libreoxi-send-status">
+      <div class="card-header"><h5 class="card-title mb-0"><i class="mdi mdi-email-outline me-1"></i>{{ "ui.sched_title"|tr:lang }}</h5></div>
+      <div class="list-group list-group-flush">
+        {% for row in schedule_info %}
+        <div class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <span><i class="mdi {{ row.icon }} me-2 text-{{ row.state }}"></i>{{ row.label }}</span>
+          <span class="text-end">
+            <strong class="text-{{ row.state }}">{{ row.value }}</strong>
+            {% if row.note %}<span class="badge bg-{{ row.state }} ms-2">{{ row.note }}</span>{% endif %}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <form method="post" id="libreoxi-email-form" autocomplete="off" data-no-password-save>
       {% csrf_token %}
 
       <div class="card mb-3">
@@ -34,9 +50,6 @@
           {% endfor %}
           {% if pdf_password_set %}
             <div class="form-text libreoxi-pdfpass">{{ "ui.pdf_password_is_set"|tr:lang }}</div>
-          {% endif %}
-          {% if last_sent %}
-            <div class="form-text">{% trf "ui.last_sent" lang time=last_sent %}</div>
           {% endif %}
         </div>
       </div>
@@ -93,4 +106,5 @@
     }
   })();
 </script>
+{% include "netbox_libreoxi/inc/no_password_save.html" %}
 {% endblock %}

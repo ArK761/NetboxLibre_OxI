@@ -10,7 +10,9 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone as django_timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import mark_safe
+from django.views.decorators.http import require_POST
 
 from dcim.models import Device
 from netbox.views import generic
@@ -640,10 +642,30 @@ def email_view(request):
     else:
         form = LibreOXIEmailForm(instance=instance)
     last_sent = audit.read_last_sent(instance)
+    last_test = audit.read_last_test(instance)
+    now = django_timezone.now()
+    next_send = audit.next_scheduled_send(instance, now)
+    never = tr("ui.sched_never_value", lang)
+    if next_send is None:
+        next_value, next_note, next_state = tr("ui.sched_off_value", lang), "", "muted"
+    elif next_send <= now:
+        next_value, next_state = format_timestamp(next_send.isoformat(), instance), "warning"
+        next_note = tr("ui.sched_due_note", lang)
+    else:
+        next_value, next_state = format_timestamp(next_send.isoformat(), instance), "info"
+        next_note = tr("ui.sched_in", lang, remaining=audit.format_remaining(next_send - now, lang))
+    schedule_info = [
+        {"label": tr("ui.sched_last_label", lang), "icon": "mdi-email-check-outline", "state": "success" if last_sent else "muted",
+         "value": format_timestamp(last_sent.isoformat(), instance) if last_sent else never, "note": ""},
+        {"label": tr("ui.sched_next_label", lang), "icon": "mdi-email-fast-outline", "state": next_state, "value": next_value, "note": next_note},
+        {"label": tr("ui.test_last_label", lang), "icon": "mdi-email-search-outline", "state": "success" if last_test else "muted",
+         "value": format_timestamp(last_test.isoformat(), instance) if last_test else never, "note": ""},
+    ]
     return render(
         request,
         "netbox_libreoxi/email.html",
         {
+            "schedule_info": schedule_info,
             "form": form,
             "recipients": ", ".join(audit.recipients(instance)),
             "last_sent": format_timestamp(last_sent.isoformat(), instance) if last_sent else "",
@@ -654,3 +676,22 @@ def email_view(request):
         },
     )
 
+
+
+@require_POST
+def health_reload(request):
+    """Repair the plugin's background jobs from the web: remove stuck jobs and schedule new ones."""
+    if (denied := _check(request, MANAGE_PERM)) is not None:
+        return denied
+    from . import health
+
+    lang = language_of(LibreOXISettings.objects.first())
+    try:
+        result = health.reload_jobs()
+        messages.success(request, tr("health.reloaded", lang, **result))
+    except Exception as exc:
+        messages.error(request, tr("health.reload_failed", lang, error=exc.__class__.__name__))
+    target = request.POST.get("next", "")
+    if not url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        target = reverse("plugins:netbox_libreoxi:logs")
+    return redirect(target)

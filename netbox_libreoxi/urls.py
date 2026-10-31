@@ -9,6 +9,7 @@ urlpatterns = [
     path("logs/", views.logs_view, name="logs"),
     path("audit/", views.audit_view, name="audit"),
     path("email/", views.email_view, name="email"),
+    path("health/reload/", views.health_reload, name="health_reload"),
     path("devices/<int:pk>/download/", views.download_config, name="download_config"),
     path("devices/<int:pk>/compare/", views.compare_config, name="compare_config"),
     path("devices/<int:pk>/delete-revision/", views.delete_revision, name="delete_revision"),

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from time import monotonic
 from urllib.parse import quote
 
 import requests
@@ -9,6 +11,8 @@ from .models import LibreOXISettings
 from .storage import append_log, cleanup, device_dir, store_if_changed
 
 
+REQUEST_DEADLINE = 60  # seconds for the whole response of one device
+MAX_BODY_BYTES = 50 * 1024 * 1024
 NOT_MONITORED_ERROR = "Device is not enabled for LibreOXI monitoring. Select its Device Role or add the device explicitly in LibreOXI Settings."
 
 
@@ -31,9 +35,27 @@ def device_ip(device):
     return str(device.primary_ip4.address.ip)
 
 
-def _extract_config(response: requests.Response):
+def _read_body(response: requests.Response) -> bytes:
+    """Read the whole body within REQUEST_DEADLINE seconds.
+
+    requests' timeout limits every single wait on the socket, not the request as a whole, so a server
+    that keeps sending a few bytes could keep a worker thread (and with it the whole job) busy forever.
+    """
+    deadline = monotonic() + REQUEST_DEADLINE
+    chunks, size = [], 0
+    for chunk in response.iter_content(chunk_size=65536):
+        chunks.append(chunk)
+        size += len(chunk)
+        if size > MAX_BODY_BYTES:
+            raise RuntimeError("LibreNMS response is too large.")
+        if monotonic() > deadline:
+            raise RuntimeError(f"LibreNMS response not received within {REQUEST_DEADLINE}s.")
+    return b"".join(chunks)
+
+
+def _extract_config(body: bytes):
     try:
-        data = response.json()
+        data = json.loads(body.decode("utf-8", errors="replace"))
     except ValueError as exc:
         raise RuntimeError("LibreNMS returned an invalid JSON response.") from exc
 
@@ -73,14 +95,16 @@ def fetch_device(settings: LibreOXISettings, device):
     headers = {"X-Auth-Token": settings.api_token_encrypted}
 
     try:
-        response = requests.get(
+        timeout = settings.request_timeout
+        with requests.get(
             url,
             headers=headers,
-            timeout=settings.request_timeout,
+            timeout=(min(5, timeout), timeout),
             verify=settings.verify_tls,
-        )
-        response.raise_for_status()
-        content = _extract_config(response)
+            stream=True,
+        ) as response:
+            response.raise_for_status()
+            content = _extract_config(_read_body(response))
     except requests.RequestException as exc:
         append_log(settings.storage_root, f"ERROR {device} LibreNMS request failed: {exc}")
         _record_last_check(settings.storage_root, device.pk)

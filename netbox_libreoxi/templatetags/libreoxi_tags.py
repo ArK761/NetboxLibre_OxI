@@ -65,3 +65,29 @@ def trf(key, lang, **values):
     from ..i18n import tr
 
     return tr(key, lang or "en", **values)
+
+
+@register.inclusion_tag("netbox_libreoxi/inc/health_banner.html", takes_context=True)
+def libreoxi_health(context):
+    """Green / red bar with the state of the background jobs (and Reload) at the top of every LibreOXI page."""
+    from .. import health
+    from ..i18n import language_of
+    from ..models import LibreOXISettings
+
+    request = context.get("request")
+    settings = LibreOXISettings.objects.first()
+    lang = language_of(settings)
+    state = health.status(settings)
+    last = state["last"]
+    display = ""
+    if last is not None:
+        try:
+            display = last.strftime(settings.datetime_format)
+        except (AttributeError, TypeError, ValueError):
+            display = last.strftime("%d.%m.%Y %H:%M")
+    can_manage = bool(request is not None and request.user.has_perm("netbox_libreoxi.change_libreoxisettings"))
+    return {
+        "state": state, "lang": lang, "last_display": display, "can_reload": can_manage and state["can_repair"],
+        "can_manage": can_manage, "build": health.plugin_build(),
+        "csrf_token": context.get("csrf_token"), "next": request.get_full_path() if request is not None else "",
+    }

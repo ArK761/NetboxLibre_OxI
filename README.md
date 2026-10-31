@@ -40,6 +40,14 @@ The default LibreOXI storage path is `/opt/libreoxi`.
 
 For a later plugin upgrade, use the same pip command. If the release contains new database migrations, run the migration command shown above and restart NetBox.
 
+## Health bar
+
+Every LibreOXI page shows a bar under the top menu: **green** when the background jobs run as they should
+(with the time of the last scheduled check), **red** when a job is stuck, lost or has no next run, or when the
+`netbox-rq` worker is not running. Users with the *change LibreOXI settings* permission get a **Reload** button
+in the red bar: it removes the stuck jobs and schedules new ones (no shell access needed). It cannot start a
+stopped `netbox-rq` service; the bar says so in that case.
+
 ## Features
 
 ### Configuration snapshots and history

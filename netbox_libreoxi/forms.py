@@ -47,11 +47,19 @@ SCHEDULE_PRESETS = (
 )
 
 
+# Keep browsers and password managers from offering to save these secrets (they would take the neighbouring
+# text field for the user name). The templates additionally include inc/no_password_save.html.
+SECRET_ATTRS = {
+    "autocomplete": "new-password", "data-lpignore": "true", "data-1p-ignore": "true", "data-bwignore": "true",
+    "data-form-type": "other", "spellcheck": "false", "autocapitalize": "off",
+}
+
+
 class LibreOXISettingsForm(forms.ModelForm):
     api_token = forms.CharField(
         label="LibreNMS API token",
         required=False,
-        widget=forms.PasswordInput(render_value=True),
+        widget=forms.PasswordInput(render_value=True, attrs=SECRET_ATTRS),
     )
     device_roles = DynamicModelMultipleChoiceField(
         label="Device roles to monitor",
@@ -257,7 +265,7 @@ class LibreOXIEmailForm(forms.ModelForm):
     smtp_username = forms.CharField(required=False)
     smtp_password_input = forms.CharField(
         required=False,
-        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+        widget=forms.PasswordInput(render_value=False, attrs=SECRET_ATTRS),
     )
     audit_email_recipients = forms.CharField(
         required=False,
@@ -271,7 +279,7 @@ class LibreOXIEmailForm(forms.ModelForm):
     audit_pdf_protect = forms.BooleanField(required=False)
     audit_pdf_password_input = forms.CharField(
         required=False,
-        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+        widget=forms.PasswordInput(render_value=False, attrs=SECRET_ATTRS),
     )
 
     class Meta:

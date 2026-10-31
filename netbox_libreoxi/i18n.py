@@ -19,6 +19,17 @@ def language_of(settings) -> str:
     return lang if lang in dict(LANGUAGES) else DEFAULT_LANGUAGE
 
 
+def day_word(count: int, lang: str) -> str:
+    """"day" in the right form for the number (1 / 2-4 / 5+ in Slovak and Czech)."""
+    if lang == "sk":
+        return "deň" if count == 1 else "dni" if 2 <= count <= 4 else "dní"
+    if lang == "cs":
+        return "den" if count == 1 else "dny" if 2 <= count <= 4 else "dnů"
+    if lang == "de":
+        return "Tag" if count == 1 else "Tage"
+    return "day" if count == 1 else "days"
+
+
 def tr(key: str, lang: str = DEFAULT_LANGUAGE, **values) -> str:
     entry = MESSAGES.get(key)
     if entry is None:
@@ -314,6 +325,24 @@ MESSAGES: dict[str, dict[str, str]] = {
     "ui.email_options": {"en": "Email Options", "sk": "Nastavenie e-mailu", "cs": "Nastavení e-mailu", "de": "E-Mail-Optionen"},
     "ui.audit_sending": {"en": "Audit e-mail", "sk": "Odosielanie auditu", "cs": "Odesílání auditu", "de": "Audit-E-Mail"},
     "ui.password_saved": {"en": "A password is saved.", "sk": "Heslo je uložené.", "cs": "Heslo je uložené.", "de": "Ein Passwort ist gespeichert."},
+    "ui.sched_last": {"en": "Automatic e-mail (cron): sent {time}", "sk": "Automatický e-mail (cron): odoslaný {time}", "cs": "Automatický e-mail (cron): odeslán {time}", "de": "Automatische E-Mail (Cron): gesendet {time}"},
+    "ui.sched_never": {"en": "Automatic e-mail (cron): not sent yet", "sk": "Automatický e-mail (cron): zatiaľ neodoslaný", "cs": "Automatický e-mail (cron): zatím neodeslán", "de": "Automatische E-Mail (Cron): noch nicht gesendet"},
+    "ui.sched_next": {"en": "Next e-mail: {time} (in {remaining})", "sk": "Najbližší e-mail: {time} (o {remaining})", "cs": "Nejbližší e-mail: {time} (za {remaining})", "de": "Nächste E-Mail: {time} (in {remaining})"},
+    "ui.sched_next_due": {"en": "Next e-mail: {time} (due now, goes out within a minute)", "sk": "Najbližší e-mail: {time} (už je na rade, odíde do minúty)", "cs": "Nejbližší e-mail: {time} (už je na řadě, odejde do minuty)", "de": "Nächste E-Mail: {time} (fällig, wird innerhalb einer Minute gesendet)"},
+    "ui.sched_off": {"en": "Next e-mail: automatic sending is off (or there are no recipients)", "sk": "Najbližší e-mail: automatické odosielanie je vypnuté (alebo nie sú príjemcovia)", "cs": "Nejbližší e-mail: automatické odesílání je vypnuto (nebo nejsou příjemci)", "de": "Nächste E-Mail: automatischer Versand ist aus (oder es gibt keine Empfänger)"},
+    "ui.test_last": {"en": "Test e-mail: sent {time}", "sk": "Testovací e-mail: odoslaný {time}", "cs": "Testovací e-mail: odeslán {time}", "de": "Test-E-Mail: gesendet {time}"},
+    "ui.test_never": {"en": "Test e-mail: not sent yet", "sk": "Testovací e-mail: zatiaľ neodoslaný", "cs": "Testovací e-mail: zatím neodeslán", "de": "Test-E-Mail: noch nicht gesendet"},
+    "ui.sched_title": {"en": "E-mail sending status", "sk": "Stav odosielania e-mailov", "cs": "Stav odesílání e-mailů", "de": "Status des E-Mail-Versands"},
+    "ui.sched_last_label": {"en": "Last automatic e-mail (cron)", "sk": "Posledný automatický e-mail (cron)", "cs": "Poslední automatický e-mail (cron)", "de": "Letzte automatische E-Mail (Cron)"},
+    "ui.sched_next_label": {"en": "Next e-mail", "sk": "Najbližší e-mail", "cs": "Nejbližší e-mail", "de": "Nächste E-Mail"},
+    "ui.test_last_label": {"en": "Last test e-mail", "sk": "Posledný testovací e-mail", "cs": "Poslední testovací e-mail", "de": "Letzte Test-E-Mail"},
+    "ui.sched_never_value": {"en": "not sent yet", "sk": "zatiaľ neodoslaný", "cs": "zatím neodeslán", "de": "noch nicht gesendet"},
+    "ui.sched_off_value": {"en": "automatic sending is off (or there are no recipients)", "sk": "automatické odosielanie je vypnuté (alebo nie sú príjemcovia)", "cs": "automatické odesílání je vypnuto (nebo nejsou příjemci)", "de": "automatischer Versand ist aus (oder es gibt keine Empfänger)"},
+    "ui.sched_in": {"en": "in {remaining}", "sk": "o {remaining}", "cs": "za {remaining}", "de": "in {remaining}"},
+    "ui.sched_due_note": {"en": "due now, goes out within a minute", "sk": "už je na rade, odíde do minúty", "cs": "už je na řadě, odejde do minuty", "de": "fällig, wird innerhalb einer Minute gesendet"},
+    "health.build": {"en": "Installed version", "sk": "Nainštalovaná verzia", "cs": "Nainstalovaná verze", "de": "Installierte Version"},
+    "logs.open_device": {"en": "Open the device in a new window", "sk": "Otvoriť zariadenie v novom okne", "cs": "Otevřít zařízení v novém okně", "de": "Gerät in neuem Fenster öffnen"},
+    "logs.show_log": {"en": "Show the log of this device here", "sk": "Zobraziť log tohto zariadenia tu", "cs": "Zobrazit log tohoto zařízení zde", "de": "Log dieses Geräts hier anzeigen"},
     "ui.last_sent": {"en": "Last automatic sending: {time}", "sk": "Posledné automatické odoslanie: {time}", "cs": "Poslední automatické odeslání: {time}", "de": "Letzter automatischer Versand: {time}"},
     "ui.save": {"en": "Save", "sk": "Uložiť", "cs": "Uložit", "de": "Speichern"},
     "ui.send_test": {"en": "Send test e-mail", "sk": "Poslať testovací e-mail", "cs": "Poslat testovací e-mail", "de": "Test-E-Mail senden"},
@@ -370,6 +399,40 @@ MESSAGES: dict[str, dict[str, str]] = {
     "form.err_username": {"en": "Enter a username when SMTP authentication is enabled.", "sk": "Pri zapnutej SMTP autentifikácii zadajte používateľa.", "cs": "Při zapnuté SMTP autentizaci zadejte uživatele.", "de": "Bei aktivierter SMTP-Authentifizierung einen Benutzer angeben."},
 
     # ------------------------------------------------------------------ menu
+    "health.ok": {"en": "LibreOXI is running normally.", "sk": "LibreOXI beží v poriadku.", "cs": "LibreOXI běží v pořádku.", "de": "LibreOXI läuft normal."},
+    "health.ok_last": {"en": "Last scheduled check: {time}", "sk": "Posledná plánovaná kontrola: {time}", "cs": "Poslední plánovaná kontrola: {time}", "de": "Letzte geplante Prüfung: {time}"},
+    "health.bad": {"en": "LibreOXI is not running correctly.", "sk": "LibreOXI nebeží správne.", "cs": "LibreOXI neběží správně.", "de": "LibreOXI läuft nicht korrekt."},
+    "health.worker_down": {"en": "The background worker (netbox-rq) is not running, so no checks are performed. It has to be started on the server.", "sk": "Nebeží služba na pozadí (netbox-rq), preto sa nevykonávajú kontroly. Treba ju spustiť na serveri.", "cs": "Neběží služba na pozadí (netbox-rq), proto se neprovádějí kontroly. Je třeba ji spustit na serveru.", "de": "Der Hintergrunddienst (netbox-rq) läuft nicht, daher werden keine Prüfungen durchgeführt. Er muss auf dem Server gestartet werden."},
+    "health.cannot_check": {"en": "The state of the jobs cannot be read ({error}).", "sk": "Stav jobov sa nepodarilo načítať ({error}).", "cs": "Stav jobů se nepodařilo načíst ({error}).", "de": "Der Zustand der Jobs kann nicht gelesen werden ({error})."},
+    "health.r_running": {"en": "Job “{name}” has been running for {seconds} s and is stuck.", "sk": "Job „{name}“ beží už {seconds} s a zamrzol.", "cs": "Job „{name}“ běží již {seconds} s a zamrzl.", "de": "Job „{name}“ läuft seit {seconds} s und hängt."},
+    "health.r_scheduled": {"en": "Job “{name}” is {seconds} s overdue and was not started.", "sk": "Job „{name}“ mešká {seconds} s a nespustil sa.", "cs": "Job „{name}“ mešká {seconds} s a nespustil se.", "de": "Job „{name}“ ist {seconds} s überfällig und wurde nicht gestartet."},
+    "health.r_pending": {"en": "Job “{name}” has been waiting {seconds} s in the queue.", "sk": "Job „{name}“ čaká vo fronte už {seconds} s.", "cs": "Job „{name}“ čeká ve frontě již {seconds} s.", "de": "Job „{name}“ wartet seit {seconds} s in der Warteschlange."},
+    "health.r_lost": {"en": "Job “{name}” is missing in the queue (e.g. after a Redis reset) and will never run.", "sk": "Job „{name}“ chýba vo fronte (napr. po resete Redisu) a nikdy sa nespustí.", "cs": "Job „{name}“ chybí ve frontě (např. po resetu Redisu) a nikdy se nespustí.", "de": "Job „{name}“ fehlt in der Warteschlange (z. B. nach einem Redis-Reset) und wird nie laufen."},
+    "health.r_nosuccessor": {"en": "Job “{name}” has no next run scheduled.", "sk": "Job „{name}“ nemá naplánovaný ďalší beh.", "cs": "Job „{name}“ nemá naplánovaný další běh.", "de": "Für Job „{name}“ ist kein nächster Lauf geplant."},
+    "health.reload": {"en": "Reload", "sk": "Reload", "cs": "Reload", "de": "Neu laden"},
+    "health.reload_hint": {"en": "Removes the stuck jobs and schedules new ones.", "sk": "Zmaže zamrznuté joby a naplánuje nové.", "cs": "Smaže zamrzlé joby a naplánuje nové.", "de": "Entfernt die hängenden Jobs und plant neue ein."},
+    "health.reloaded": {"en": "Jobs reloaded: {removed} removed, {created} scheduled.", "sk": "Joby obnovené: {removed} zmazaných, {created} naplánovaných.", "cs": "Joby obnoveny: {removed} smazáno, {created} naplánováno.", "de": "Jobs neu geladen: {removed} entfernt, {created} geplant."},
+    "health.reload_failed": {"en": "Reload failed: {error}", "sk": "Reload zlyhal: {error}", "cs": "Reload selhal: {error}", "de": "Neu laden fehlgeschlagen: {error}"},
+    "health.title_ok": {"en": "Everything is OK", "sk": "Všetko je v poriadku", "cs": "Vše je v pořádku", "de": "Alles in Ordnung"},
+    "health.title_bad": {"en": "Action needed", "sk": "Treba zasiahnuť", "cs": "Je třeba zasáhnout", "de": "Handlungsbedarf"},
+    "health.nothing_to_do": {"en": "Nothing to do: the scheduled checks run as they should.", "sk": "Netreba nič robiť: plánované kontroly bežia tak, ako majú.", "cs": "Není třeba nic dělat: plánované kontroly běží tak, jak mají.", "de": "Nichts zu tun: die geplanten Prüfungen laufen wie vorgesehen."},
+    "health.what_to_do": {"en": "What to do", "sk": "Čo robiť", "cs": "Co dělat", "de": "Was zu tun ist"},
+    "health.problems": {"en": "Problems", "sk": "Problémy", "cs": "Problémy", "de": "Probleme"},
+    "health.details": {"en": "Details", "sk": "Podrobnosti", "cs": "Podrobnosti", "de": "Details"},
+    "health.worker": {"en": "Background worker (netbox-rq)", "sk": "Služba na pozadí (netbox-rq)", "cs": "Služba na pozadí (netbox-rq)", "de": "Hintergrunddienst (netbox-rq)"},
+    "health.worker_yes": {"en": "running", "sk": "beží", "cs": "běží", "de": "läuft"},
+    "health.worker_no": {"en": "not running", "sk": "nebeží", "cs": "neběží", "de": "läuft nicht"},
+    "health.worker_unknown": {"en": "unknown", "sk": "neznáme", "cs": "neznámé", "de": "unbekannt"},
+    "health.s_none": {"en": "no run scheduled", "sk": "nič nie je naplánované", "cs": "nic není naplánováno", "de": "kein Lauf geplant"},
+    "health.s_running": {"en": "running since {time}", "sk": "beží od {time}", "cs": "běží od {time}", "de": "läuft seit {time}"},
+    "health.s_scheduled": {"en": "next run at {time}", "sk": "ďalší beh o {time}", "cs": "další běh v {time}", "de": "nächster Lauf um {time}"},
+    "health.s_pending": {"en": "waiting in the queue", "sk": "čaká vo fronte", "cs": "čeká ve frontě", "de": "wartet in der Warteschlange"},
+    "health.do_worker": {"en": "The netbox-rq service is stopped. Ask the server administrator to start it; Reload cannot do that.", "sk": "Služba netbox-rq je zastavená. Požiadajte administrátora servera, aby ju spustil; Reload to nevie.", "cs": "Služba netbox-rq je zastavená. Požádejte správce serveru, aby ji spustil; Reload to neumí.", "de": "Der Dienst netbox-rq ist gestoppt. Bitten Sie den Serveradministrator, ihn zu starten; Neu laden kann das nicht."},
+    "health.do_reload": {"en": "Press Reload: it removes the stuck jobs and schedules new ones. The bar turns green within a minute. If it does not, contact the administrator.", "sk": "Stlačte Reload: zmaže zamrznuté joby a naplánuje nové. Pásik sa do minúty zmení na zelený. Ak nie, kontaktujte administrátora.", "cs": "Stiskněte Reload: smaže zamrzlé joby a naplánuje nové. Pruh se do minuty změní na zelený. Pokud ne, kontaktujte správce.", "de": "Drücken Sie Neu laden: Es entfernt die hängenden Jobs und plant neue ein. Die Leiste wird innerhalb einer Minute grün. Wenn nicht, wenden Sie sich an den Administrator."},
+    "health.do_check": {"en": "The state of the jobs cannot be read. Check that the database and Redis are running and contact the administrator.", "sk": "Stav jobov sa nedá načítať. Skontrolujte, či beží databáza a Redis, a kontaktujte administrátora.", "cs": "Stav jobů nelze načíst. Zkontrolujte, zda běží databáze a Redis, a kontaktujte správce.", "de": "Der Zustand der Jobs kann nicht gelesen werden. Prüfen Sie, ob Datenbank und Redis laufen, und wenden Sie sich an den Administrator."},
+    "health.no_permission": {"en": "Reload is available to users who may change the LibreOXI settings.", "sk": "Reload môže použiť používateľ s právom meniť nastavenia LibreOXI.", "cs": "Reload může použít uživatel s právem měnit nastavení LibreOXI.", "de": "Neu laden steht Benutzern mit dem Recht zum Ändern der LibreOXI-Einstellungen zur Verfügung."},
+    "health.last_check": {"en": "Last scheduled check", "sk": "Posledná plánovaná kontrola", "cs": "Poslední plánovaná kontrola", "de": "Letzte geplante Prüfung"},
+    "health.close": {"en": "Close", "sk": "Zavrieť", "cs": "Zavřít", "de": "Schließen"},
     "menu.settings": {"en": "Settings", "sk": "Nastavenia", "cs": "Nastavení", "de": "Einstellungen"},
     "menu.logs": {"en": "Logs", "sk": "Logy", "cs": "Logy", "de": "Protokolle"},
     "menu.audit": {"en": "Audit", "sk": "Audit", "cs": "Audit", "de": "Audit"},

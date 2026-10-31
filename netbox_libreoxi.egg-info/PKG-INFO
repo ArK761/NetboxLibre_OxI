@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: netbox-libreoxi
+Version: 1.0.6
+Summary: NetBox plugin for LibreNMS Oxidized/OXI configuration history
+Requires-Python: >=3.10
+Requires-Dist: croniter<7,>=2.0
+Requires-Dist: reportlab<6,>=4.0
